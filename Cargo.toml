@@ -12,9 +12,16 @@ default-run = "solana-postgres-rpc-server"
 
 [dependencies]
 clap = "2.33.1"
+jsonrpc-core = "18.0.0"
+jsonrpc-core-client = { version = "18.0.0", features = ["ipc", "ws"] }
+jsonrpc-derive = "18.0.0"
+jsonrpc-http-server = "18.0.0"
 jsonrpc-server-utils= "18.0.0"
 log = "0.4.14"
 serde = "1.0.133"
 serde_json = "1.0.74"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["codec", "compat"] }
+solana-account-decoder = { version = "=1.9.4" }
+solana-client = { version = "=1.9.4" }
+solana-sdk = { version = "=1.9.4" }

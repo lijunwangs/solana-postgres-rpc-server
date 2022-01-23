@@ -1,9 +1,14 @@
 use {
+    crate::{
+        request_processor::JsonRpcRequestProcessor,
+        rpc::rpc_accounts::{self, *},
+    },
+    jsonrpc_core::MetaIoHandler,
     log::*,
     std::{
         net::SocketAddr,
         sync::Arc,
-        thread::JoinHandle
+        thread::{Builder, JoinHandle}
     },
 };
 
@@ -34,6 +39,7 @@ fn renice_this_thread(adjustment: i8) -> Result<(), String> {
     }
 }
 
+#[allow(unused_variables)]
 impl JsonRpcService {
     pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig) {
         info!("rpc bound to {:?}", rpc_addr);
@@ -49,5 +55,15 @@ impl JsonRpcService {
                 .build()
                 .expect("Runtime"),
         );
+        let request_processer = JsonRpcRequestProcessor::new(config);
+
+        let thread_hdl = Builder::new()
+            .name("solana-jsonrpc".to_string())
+            .spawn(move || {
+                renice_this_thread(rpc_niceness_adj).unwrap();
+                let mut io = MetaIoHandler::default();
+                io.extend_with(rpc_accounts::AccountsDataImpl.to_delegate());
+            })
+            .unwrap();
     }
 }
