@@ -8,7 +8,7 @@ use {
     std::{
         net::SocketAddr,
         sync::Arc,
-        thread::{Builder, JoinHandle}
+        thread::{self, Builder, JoinHandle}
     },
 };
 
@@ -41,7 +41,7 @@ fn renice_this_thread(adjustment: i8) -> Result<(), String> {
 
 #[allow(unused_variables)]
 impl JsonRpcService {
-    pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig) {
+    pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig) -> Self {
         info!("rpc bound to {:?}", rpc_addr);
         let rpc_threads = 1.max(config.rpc_threads);
         let rpc_niceness_adj = config.rpc_niceness_adj;
@@ -65,5 +65,13 @@ impl JsonRpcService {
                 io.extend_with(rpc_accounts::AccountsDataImpl.to_delegate());
             })
             .unwrap();
+
+        Self {
+            thread_hdl
+        }
+    }
+
+    pub fn join(self) -> thread::Result<()> {
+        self.thread_hdl.join()
     }
 }

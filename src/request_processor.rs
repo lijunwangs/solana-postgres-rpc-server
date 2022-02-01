@@ -35,6 +35,7 @@ impl JsonRpcRequestProcessor {
         Err(Error::internal_error())
     }
 
+    #[allow(unused_mut)]
     pub fn get_multiple_accounts(
         &self,
         pubkeys: Vec<Pubkey>,
@@ -43,6 +44,7 @@ impl JsonRpcRequestProcessor {
         Err(Error::internal_error())
     }
 
+    #[allow(unused_mut)]
     pub fn get_program_accounts(
         &self,
         program_id: &Pubkey,
