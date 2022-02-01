@@ -27,5 +27,5 @@ pub fn main() {
         .get_matches();
 
     let rpc_addr = value_t!(matches, "rpc_port", u16).expect("rpc-port is required");
-    let db_config = value_t!(matches, "db_config", u16).expect("db-config is required");
+    let db_config = value_t!(matches, "db_config", String).expect("db-config is required");
 }
