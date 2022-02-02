@@ -1,9 +1,7 @@
 use {
-    crate::{rpc_service::JsonRpcConfig, rpc::OptionalContext},
-    jsonrpc_core::{Metadata, Result, types::Error},
-    solana_account_decoder::{
-        UiAccount,
-    },
+    crate::{rpc::OptionalContext, rpc_service::JsonRpcConfig},
+    jsonrpc_core::{types::Error, Metadata, Result},
+    solana_account_decoder::UiAccount,
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
         rpc_filter::RpcFilterType,
@@ -14,7 +12,7 @@ use {
 
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
-    pub config: JsonRpcConfig
+    pub config: JsonRpcConfig,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
@@ -22,9 +20,7 @@ impl Metadata for JsonRpcRequestProcessor {}
 #[allow(unused_variables)]
 impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig) -> Self {
-        Self {
-            config
-        }
+        Self { config }
     }
 
     pub fn get_account_info(

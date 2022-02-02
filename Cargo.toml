@@ -18,10 +18,13 @@ jsonrpc-derive = "18.0.0"
 jsonrpc-http-server = "18.0.0"
 jsonrpc-server-utils= "18.0.0"
 log = "0.4.14"
+num_cpus = "1.13.1"
 serde = "1.0.133"
 serde_json = "1.0.74"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["codec", "compat"] }
 solana-account-decoder = { version = "=1.9.4" }
 solana-client = { version = "=1.9.4" }
+solana-clap-utils = { version = "=1.9.4" }
+solana-net-utils = { version = "=1.9.4" }
 solana-sdk = { version = "=1.9.4" }

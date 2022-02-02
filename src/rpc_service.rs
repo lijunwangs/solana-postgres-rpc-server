@@ -8,7 +8,7 @@ use {
     std::{
         net::SocketAddr,
         sync::Arc,
-        thread::{self, Builder, JoinHandle}
+        thread::{self, Builder, JoinHandle},
     },
 };
 
@@ -66,9 +66,7 @@ impl JsonRpcService {
             })
             .unwrap();
 
-        Self {
-            thread_hdl
-        }
+        Self { thread_hdl }
     }
 
     pub fn join(self) -> thread::Result<()> {

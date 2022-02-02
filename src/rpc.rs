@@ -1,19 +1,17 @@
 use {
     crate::request_processor::JsonRpcRequestProcessor,
-    log::*,
     jsonrpc_core::{Error, Result},
     jsonrpc_derive::rpc,
+    log::*,
     serde::{Deserialize, Serialize},
+    solana_account_decoder::UiAccount,
     solana_client::{
         rpc_config::*,
         rpc_filter::RpcFilterType,
-        rpc_response::{Response as RpcResponse, *},
         rpc_request::{MAX_GET_PROGRAM_ACCOUNT_FILTERS, MAX_MULTIPLE_ACCOUNTS},
+        rpc_response::{Response as RpcResponse, *},
     },
-    solana_account_decoder::{
-        UiAccount,
-    },
-    solana_sdk::pubkey::Pubkey
+    solana_sdk::pubkey::Pubkey,
 };
 
 /// Wrapper for rpc return types of methods that provide responses both with and without context.
@@ -145,6 +143,5 @@ pub mod rpc_accounts {
             }
             meta.get_program_accounts(&program_id, config, filters, with_context)
         }
-
     }
 }
