@@ -14,6 +14,8 @@ use {
     solana_sdk::pubkey::Pubkey,
 };
 
+pub const MAX_REQUEST_PAYLOAD_SIZE: usize = 50 * (1 << 10); // 50kB
+
 /// Wrapper for rpc return types of methods that provide responses both with and without context.
 /// Main purpose of this is to fix methods that lack context information in their return type,
 /// without breaking backwards compatibility.
