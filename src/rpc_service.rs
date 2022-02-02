@@ -123,6 +123,18 @@ impl JsonRpcService {
                 .request_middleware(request_middleware)
                 .max_request_body_size(MAX_REQUEST_PAYLOAD_SIZE)
                 .start_http(&rpc_addr);
+
+                if let Err(e) = server {
+                    warn!(
+                        "JSON RPC service unavailable error: {:?}. \n\
+                           Also, check that port {} is not already in use by another application",
+                        e,
+                        rpc_addr.port()
+                    );
+                    return;
+                }
+                let server = server.unwrap();
+                server.wait();
             })
             .unwrap();
 
