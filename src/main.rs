@@ -3,10 +3,81 @@ use {
     clap::{crate_description, crate_name, value_t, value_t_or_exit, App, Arg},
     solana_clap_utils::input_validators::{is_niceness_adjustment_valid, is_parsable},
     solana_postgres_rpc_server::rpc_service::{JsonRpcConfig, JsonRpcService},
-    std::net::SocketAddr,
+    std::{
+        env,
+        fs::{OpenOptions},
+        net::SocketAddr, process::exit,
+        thread::JoinHandle
+    },
 };
 
 pub const MAX_MULTIPLE_ACCOUNTS: usize = 100;
+
+#[cfg(unix)]
+fn redirect_stderr(filename: &str) {
+    use std::os::unix::io::AsRawFd;
+    match OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open(filename)
+    {
+        Ok(file) => unsafe {
+            libc::dup2(file.as_raw_fd(), libc::STDERR_FILENO);
+        },
+        Err(err) => eprintln!("Unable to open {}: {}", filename, err),
+    }
+}
+
+
+// Redirect stderr to a file with support for logrotate by sending a SIGUSR1 to the process.
+//
+// Upon success, future `log` macros and `eprintln!()` can be found in the specified log file.
+pub fn redirect_stderr_to_file(logfile: Option<String>) -> Option<JoinHandle<()>> {
+    // Default to RUST_BACKTRACE=1 for more informative validator logs
+    if env::var_os("RUST_BACKTRACE").is_none() {
+        env::set_var("RUST_BACKTRACE", "1")
+    }
+
+    let filter = "solana=info";
+    match logfile {
+        None => {
+            solana_logger::setup_with_default(filter);
+            None
+        }
+        Some(logfile) => {
+            #[cfg(unix)]
+            {
+                use log::info;
+                let mut signals =
+                    signal_hook::iterator::Signals::new(&[signal_hook::consts::SIGUSR1])
+                        .unwrap_or_else(|err| {
+                            eprintln!("Unable to register SIGUSR1 handler: {:?}", err);
+                            exit(1);
+                        });
+
+                solana_logger::setup_with_default(filter);
+                redirect_stderr(&logfile);
+                Some(std::thread::spawn(move || {
+                    for signal in signals.forever() {
+                        info!(
+                            "received SIGUSR1 ({}), reopening log file: {:?}",
+                            signal, logfile
+                        );
+                        redirect_stderr(&logfile);
+                    }
+                }))
+            }
+            #[cfg(not(unix))]
+            {
+                println!("logrotate is not supported on this platform");
+                solana_logger::setup_file_with_default(&logfile, filter);
+                None
+            }
+        }
+    }
+}
+
 
 #[allow(unused_variables)]
 pub fn main() {
@@ -69,7 +140,32 @@ pub fn main() {
                       increases priority, positive value decreases priority.",
                 ),
         )
+        .arg(
+            Arg::with_name("logfile")
+                .short("o")
+                .long("log")
+                .value_name("FILE")
+                .takes_value(true)
+                .help("Redirect logging to the specified file, '-' for standard error. \
+                       Sending the SIGUSR1 signal to the process will cause it \
+                       to re-open the log file"),
+        )        
         .get_matches();
+
+    let logfile = {
+        let logfile = matches
+            .value_of("logfile")
+            .map(|s| s.into())
+            .unwrap_or_else(|| "solana-postgres-rpc-server.log".to_string());
+
+        if logfile == "-" {
+            None
+        } else {
+            println!("log file: {}", logfile);
+            Some(logfile)
+        }
+    };
+    let _logger_thread = redirect_stderr_to_file(logfile);
 
     let rpc_bind_address = if matches.is_present("rpc_bind_address") {
         solana_net_utils::parse_host(matches.value_of("rpc_bind_address").unwrap())
