@@ -1,6 +1,7 @@
 use {
     crate::{rpc::OptionalContext, rpc_service::JsonRpcConfig},
     jsonrpc_core::{types::Error, Metadata, Result},
+    log::*,
     solana_account_decoder::UiAccount,
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
@@ -28,6 +29,7 @@ impl JsonRpcRequestProcessor {
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
+        info!("getting account_info is called...");
         Err(Error::internal_error())
     }
 
