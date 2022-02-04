@@ -29,7 +29,7 @@ impl JsonRpcRequestProcessor {
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
-        info!("getting account_info is called...");
+        info!("getting account_info is called... {}", pubkey);
         Err(Error::internal_error())
     }
 

@@ -19,16 +19,22 @@ jsonrpc-http-server = "18.0.0"
 jsonrpc-server-utils= "18.0.0"
 log = "0.4.14"
 num_cpus = "1.13.1"
+openssl = { version = "0.10" }
+postgres = { version = "0.19.2", features = ["with-chrono-0_4"] }
+postgres-types = { version = "0.2.2", features = ["derive"] }
+postgres-openssl = { version = "0.5.0"}
 serde = "1.0.133"
 serde_json = "1.0.74"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["codec", "compat"] }
-solana-account-decoder = { version = "=1.9.4" }
-solana-client = { version = "=1.9.4" }
-solana-clap-utils = { version = "=1.9.4" }
-solana-logger = { version = "=1.9.4" }
-solana-net-utils = { version = "=1.9.4" }
-solana-sdk = { version = "=1.9.4" }
+solana-account-decoder = { version = "=1.9.5" }
+solana-client = { version = "=1.9.5" }
+solana-clap-utils = { version = "=1.9.5" }
+solana-logger = { version = "=1.9.5" }
+solana-net-utils = { version = "=1.9.5" }
+solana-sdk = { version = "=1.9.5" }
+solana-accountsdb-plugin-postgres = {version = "=1.9.5"}
+thiserror = "1.0.30"
 
 [target."cfg(unix)".dependencies]
 libc = "0.2.115"
