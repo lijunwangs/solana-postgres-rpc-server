@@ -3,6 +3,7 @@ use {
     openssl::ssl::{SslConnector, SslFiletype, SslMethod},
     postgres::{Client, NoTls, Statement},
     postgres_openssl::MakeTlsConnector,
+    serde_derive::{Deserialize, Serialize},
     std::{
         io,
         sync::Mutex,
@@ -35,7 +36,8 @@ pub enum PostgresRpcServerError {
     ConfigurationError { msg: String },
 }
 
-pub struct AccountsDbPluginPostgresConfig {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PostgresRpcServerConfig {
     pub host: Option<String>,
     pub user: Option<String>,
     pub port: Option<u16>,
@@ -57,7 +59,7 @@ pub struct SimplePostgresClient {
 
 impl SimplePostgresClient {
     pub fn connect_to_db(
-        config: &AccountsDbPluginPostgresConfig,
+        config: &PostgresRpcServerConfig,
     ) -> Result<Client, PostgresRpcServerError> {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
@@ -156,4 +158,40 @@ impl SimplePostgresClient {
             Ok(client) => Ok(client),
         }
     }
+
+    fn build_get_account_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
+            WHERE pubkey = $1";
+
+        let stmt = client.prepare(stmt);
+
+        match stmt {
+            Err(err) => {
+                return Err(PostgresRpcServerError::DataSchemaError {
+                    msg: format!(
+                        "Error in preparing for the accounts update PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                        err, config.host, config.user, config
+                    ),
+                });
+            }
+            Ok(update_account_stmt) => Ok(update_account_stmt),
+        }
+    }
+
+    pub fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
+        info!("Creating SimplePostgresClient...");
+        let mut client = Self::connect_to_db(config)?;
+        let get_account_stmt = Self::build_get_account_stmt(&mut client, config)?;
+
+        info!("Created SimplePostgresClient.");
+        Ok(Self {
+            client: Mutex::new(PostgresSqlClientWrapper {
+                client,
+                get_account_stmt,
+            }),
+        })
+    }    
 }

@@ -24,6 +24,7 @@ postgres = { version = "0.19.2", features = ["with-chrono-0_4"] }
 postgres-types = { version = "0.2.2", features = ["derive"] }
 postgres-openssl = { version = "0.5.0"}
 serde = "1.0.133"
+serde_derive = "1.0.103"
 serde_json = "1.0.74"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["codec", "compat"] }
