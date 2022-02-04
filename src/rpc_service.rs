@@ -8,7 +8,7 @@ use {
     },
     jsonrpc_core::MetaIoHandler,
     jsonrpc_http_server::{
-        hyper, AccessControlAllowOrigin, CloseHandle, DomainsValidation, RequestMiddleware,
+        hyper, AccessControlAllowOrigin, DomainsValidation, RequestMiddleware,
         RequestMiddlewareAction, ServerBuilder,
     },
     log::*,
