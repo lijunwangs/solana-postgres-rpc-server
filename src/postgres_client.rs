@@ -1,52 +1,18 @@
 use {
+    crate::{
+        postgres_rpc_server_config::PostgresRpcServerConfig,
+        postgres_rpc_server_error::PostgresRpcServerError
+    },
     log::*,
     openssl::ssl::{SslConnector, SslFiletype, SslMethod},
     postgres::{Client, NoTls, Statement},
     postgres_openssl::MakeTlsConnector,
-    serde_derive::{Deserialize, Serialize},
     std::{
-        io,
         sync::Mutex,
     },
-    thiserror::Error,
 };
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
-
-/// Errors returned by plugin calls
-#[derive(Error, Debug)]
-pub enum PostgresRpcServerError {
-    /// Error opening the configuration file; for example, when the file
-    /// is not found or when the validator process has no permission to read it.
-    #[error("Error opening config file. Error detail: ({0}).")]
-    ConfigFileOpenError(#[from] io::Error),
-
-    /// Error in reading the content of the config file or the content
-    /// is not in the expected format.
-    #[error("Error reading config file. Error message: ({msg})")]
-    ConfigFileReadError { msg: String },
-
-     #[error("Error connecting to the backend data store. Error message: ({msg})")]
-    DataStoreConnectionError { msg: String },
-
-    #[error("Error preparing data store schema. Error message: ({msg})")]
-    DataSchemaError { msg: String },
-
-    #[error("Error preparing data store schema. Error message: ({msg})")]
-    ConfigurationError { msg: String },
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PostgresRpcServerConfig {
-    pub host: Option<String>,
-    pub user: Option<String>,
-    pub port: Option<u16>,
-    pub connection_str: Option<String>,
-    pub use_ssl: Option<bool>,
-    pub server_ca: Option<String>,
-    pub client_cert: Option<String>,
-    pub client_key: Option<String>,
-}
 
 struct PostgresSqlClientWrapper {
     client: Client,
