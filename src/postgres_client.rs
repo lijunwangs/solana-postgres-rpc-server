@@ -9,7 +9,7 @@ use {
     postgres_openssl::MakeTlsConnector,
     std::{
         sync::Mutex,
-    },
+    }
 };
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;

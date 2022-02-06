@@ -1,5 +1,5 @@
 use {
-    crate::{rpc::OptionalContext, rpc_service::JsonRpcConfig},
+    crate::{postgres_client::SimplePostgresClient, rpc::OptionalContext, rpc_service::JsonRpcConfig},
     jsonrpc_core::{types::Error, Metadata, Result},
     log::*,
     solana_account_decoder::UiAccount,
@@ -9,19 +9,24 @@ use {
         rpc_response::{Response as RpcResponse, *},
     },
     solana_sdk::pubkey::Pubkey,
+    std::sync::Arc
 };
 
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
     pub config: JsonRpcConfig,
+    pub db_client: Arc<SimplePostgresClient>,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
 
 #[allow(unused_variables)]
 impl JsonRpcRequestProcessor {
-    pub fn new(config: JsonRpcConfig) -> Self {
-        Self { config }
+    pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
+        Self {
+            config,
+            db_client: Arc::new(db_client) 
+        }
     }
 
     pub fn get_account_info(

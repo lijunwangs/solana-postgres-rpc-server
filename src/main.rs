@@ -2,7 +2,11 @@
 use {
     clap::{crate_description, crate_name, value_t, value_t_or_exit, App, Arg},
     solana_clap_utils::input_validators::{is_niceness_adjustment_valid, is_parsable},
-    solana_postgres_rpc_server::rpc_service::{JsonRpcConfig, JsonRpcService},
+    solana_postgres_rpc_server::{
+        postgres_client::SimplePostgresClient,
+        postgres_rpc_server_config::PostgresRpcServerConfig,
+        rpc_service::{JsonRpcConfig, JsonRpcService},
+    },
     std::{
         env,
         fs::{OpenOptions},
@@ -185,11 +189,14 @@ pub fn main() {
     let rpc_niceness_adj = value_t_or_exit!(matches, "rpc_niceness_adj", i8);
 
     let db_config = value_t!(matches, "db_config", String).expect("db-config is required");
+    let db_config = PostgresRpcServerConfig::load_config_from_file(&db_config).unwrap();
+    let db_client = SimplePostgresClient::new(&db_config).unwrap();
+
     let config = JsonRpcConfig {
         max_multiple_accounts,
         rpc_threads,
         rpc_niceness_adj,
     };
-    let json_rpc_service = JsonRpcService::new(rpc_addr, config);
+    let json_rpc_service = JsonRpcService::new(rpc_addr, config, db_client);
     json_rpc_service.join().unwrap();
 }

@@ -1,5 +1,6 @@
 use {
     crate::{
+        postgres_client::SimplePostgresClient,
         request_processor::JsonRpcRequestProcessor,
         rpc::{
             rpc_accounts::{self, *},
@@ -86,7 +87,7 @@ impl RequestMiddleware for RpcRequestMiddleware {
 
 #[allow(unused_variables)]
 impl JsonRpcService {
-    pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig) -> Self {
+    pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         info!("rpc bound to {:?}", rpc_addr);
         let rpc_threads = 1.max(config.rpc_threads);
         let rpc_niceness_adj = config.rpc_niceness_adj;
@@ -100,7 +101,7 @@ impl JsonRpcService {
                 .build()
                 .expect("Runtime"),
         );
-        let request_processor = JsonRpcRequestProcessor::new(config);
+        let request_processor = JsonRpcRequestProcessor::new(config, db_client);
 
         let thread_hdl = Builder::new()
             .name("solana-jsonrpc".to_string())
