@@ -1,7 +1,4 @@
-use {
-    thiserror::Error,
-    std::io
-};
+use {std::io, thiserror::Error};
 
 /// Errors returned by rpc server
 #[derive(Error, Debug)]
@@ -16,7 +13,7 @@ pub enum PostgresRpcServerError {
     #[error("Error reading config file. Error message: ({msg})")]
     ConfigFileReadError { msg: String },
 
-     #[error("Error connecting to the backend data store. Error message: ({msg})")]
+    #[error("Error connecting to the backend data store. Error message: ({msg})")]
     DataStoreConnectionError { msg: String },
 
     #[error("Error preparing data store schema. Error message: ({msg})")]
@@ -24,6 +21,15 @@ pub enum PostgresRpcServerError {
 
     #[error("Error preparing data store schema. Error message: ({msg})")]
     ConfigurationError { msg: String },
+
+    #[error("Error executing the database query. Error message: ({msg})")]
+    DatabaseQueryError { msg: String },
+
+    #[error("The object is not found.")]
+    ObjectNotFound { msg: String },
+
+    #[error("More than one object is found when at most 1 is expected.")]
+    MoreThanOneObjectFound { msg: String },
 }
 
 pub type Result<T> = std::result::Result<T, PostgresRpcServerError>;

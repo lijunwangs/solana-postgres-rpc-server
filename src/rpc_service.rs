@@ -87,7 +87,11 @@ impl RequestMiddleware for RpcRequestMiddleware {
 
 #[allow(unused_variables)]
 impl JsonRpcService {
-    pub fn new(rpc_addr: SocketAddr, config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
+    pub fn new(
+        rpc_addr: SocketAddr,
+        config: JsonRpcConfig,
+        db_client: SimplePostgresClient,
+    ) -> Self {
         info!("rpc bound to {:?}", rpc_addr);
         let rpc_threads = 1.max(config.rpc_threads);
         let rpc_niceness_adj = config.rpc_niceness_adj;

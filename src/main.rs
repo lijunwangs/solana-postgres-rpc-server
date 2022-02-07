@@ -7,12 +7,7 @@ use {
         postgres_rpc_server_config::PostgresRpcServerConfig,
         rpc_service::{JsonRpcConfig, JsonRpcService},
     },
-    std::{
-        env,
-        fs::{OpenOptions},
-        net::SocketAddr, process::exit,
-        thread::JoinHandle
-    },
+    std::{env, fs::OpenOptions, net::SocketAddr, process::exit, thread::JoinHandle},
 };
 
 pub const MAX_MULTIPLE_ACCOUNTS: usize = 100;
@@ -32,7 +27,6 @@ fn redirect_stderr(filename: &str) {
         Err(err) => eprintln!("Unable to open {}: {}", filename, err),
     }
 }
-
 
 // Redirect stderr to a file with support for logrotate by sending a SIGUSR1 to the process.
 //
@@ -81,7 +75,6 @@ pub fn redirect_stderr_to_file(logfile: Option<String>) -> Option<JoinHandle<()>
         }
     }
 }
-
 
 #[allow(unused_variables)]
 pub fn main() {
@@ -150,10 +143,12 @@ pub fn main() {
                 .long("log")
                 .value_name("FILE")
                 .takes_value(true)
-                .help("Redirect logging to the specified file, '-' for standard error. \
+                .help(
+                    "Redirect logging to the specified file, '-' for standard error. \
                        Sending the SIGUSR1 signal to the process will cause it \
-                       to re-open the log file"),
-        )        
+                       to re-open the log file",
+                ),
+        )
         .get_matches();
 
     let logfile = {

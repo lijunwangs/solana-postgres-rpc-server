@@ -1,7 +1,5 @@
 use {
-    crate::{
-        postgres_rpc_server_error::{PostgresRpcServerError, Result},
-    },
+    crate::postgres_rpc_server_error::{PostgresRpcServerError, Result},
     serde_derive::{Deserialize, Serialize},
     std::{fs::File, io::Read},
 };
@@ -24,20 +22,15 @@ impl PostgresRpcServerConfig {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
-        let result: serde_json::Result<PostgresRpcServerConfig> =
-            serde_json::from_str(&contents);
+        let result: serde_json::Result<PostgresRpcServerConfig> = serde_json::from_str(&contents);
         match result {
-            Err(err) => {
-                Err(PostgresRpcServerError::ConfigFileReadError {
-                    msg: format!(
-                        "The config file is not in the JSON format expected: {:?}",
-                        err
-                    ),
-                })
-            }
-            Ok(config) => {
-                Ok(config)
-            }
+            Err(err) => Err(PostgresRpcServerError::ConfigFileReadError {
+                msg: format!(
+                    "The config file is not in the JSON format expected: {:?}",
+                    err
+                ),
+            }),
+            Ok(config) => Ok(config),
         }
     }
 }
