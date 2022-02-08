@@ -187,13 +187,20 @@ pub fn main() {
     let db_config =
         PostgresRpcServerConfig::load_config_from_file(&db_config).unwrap_or_else(|err| {
             println!(
-                "Could not load the configuration file from {:?}, error: {}",
+                "Could not load the configuration file from {:?}. Please make \
+                sure it exists and is in valid JSON format. Error details: ({})",
                 db_config, err
             );
             std::process::exit(1);
         });
 
-    let db_client = SimplePostgresClient::new(&db_config).unwrap();
+    let db_client = SimplePostgresClient::new(&db_config).unwrap_or_else(
+        |err| {
+            println!("Could not connect to the database server. Please review the \
+            configuration information. Error details: ({})", err);
+            std::process::exit(1);
+        }
+    );
 
     let config = JsonRpcConfig {
         max_multiple_accounts,
