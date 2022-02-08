@@ -4,20 +4,20 @@ use {
     },
     jsonrpc_core::{types::Error, Metadata, Result},
     log::*,
-    solana_account_decoder::UiAccount,
+    solana_account_decoder::{UiAccount, UiAccountEncoding},
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
         rpc_filter::RpcFilterType,
         rpc_response::{Response as RpcResponse, *},
     },
     solana_sdk::pubkey::Pubkey,
-    std::sync::Arc,
+    std::sync::{Arc, RwLock},
 };
 
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
     pub config: JsonRpcConfig,
-    pub db_client: Arc<SimplePostgresClient>,
+    pub db_client: Arc<RwLock<SimplePostgresClient>>,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
@@ -27,17 +27,38 @@ impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         Self {
             config,
-            db_client: Arc::new(db_client),
+            db_client: Arc::new(RwLock::new(db_client)),
         }
     }
 
     pub fn get_account_info(
-        &self,
+        &mut self,
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
         info!("getting account_info is called... {}", pubkey);
-        Err(Error::internal_error())
+        let result = self.db_client.write().unwrap().get_account(pubkey);
+        match result {
+            Ok(account) => {
+                let config = config.unwrap_or_default();
+                let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+                let data_slice_config = config.data_slice;
+
+                Ok(RpcResponse {
+                    context: RpcResponseContext {
+                        slot: account.slot as u64,
+                    },
+                    value: Some(UiAccount::encode(
+                        &account.pubkey,
+                        &account,
+                        encoding,
+                        None,
+                        data_slice_config,
+                    )),
+                })
+            }
+            Err(err) => Err(Error::internal_error()),
+        }
     }
 
     #[allow(unused_mut)]

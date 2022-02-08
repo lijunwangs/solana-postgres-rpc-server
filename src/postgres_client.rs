@@ -7,7 +7,7 @@ use {
     openssl::ssl::{SslConnector, SslFiletype, SslMethod},
     postgres::{Client, NoTls, Statement},
     postgres_openssl::MakeTlsConnector,
-    solana_sdk::pubkey::Pubkey,
+    solana_sdk::{account::ReadableAccount, clock::Epoch, pubkey::Pubkey},
     std::sync::Mutex,
 };
 
@@ -17,7 +17,7 @@ impl Eq for DbAccountInfo {}
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DbAccountInfo {
-    pub pubkey: Vec<u8>,
+    pub pubkey: Pubkey,
     pub lamports: i64,
     pub owner: Vec<u8>,
     pub executable: bool,
@@ -25,6 +25,28 @@ pub struct DbAccountInfo {
     pub data: Vec<u8>,
     pub slot: i64,
     pub write_version: i64,
+}
+
+impl ReadableAccount for DbAccountInfo {
+    fn lamports(&self) -> u64 {
+        self.lamports as u64
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    fn owner(&self) -> &Pubkey {
+        &self.pubkey
+    }
+
+    fn executable(&self) -> bool {
+        self.executable
+    }
+
+    fn rent_epoch(&self) -> Epoch {
+        self.rent_epoch as u64
+    }
 }
 
 struct PostgresSqlClientWrapper {
@@ -184,7 +206,7 @@ impl SimplePostgresClient {
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
                 1 => Ok(DbAccountInfo {
-                    pubkey: result[0].get(0),
+                    pubkey: Pubkey::new(result[0].get(0)),
                     lamports: result[0].get(1),
                     owner: result[0].get(2),
                     executable: result[0].get(3),

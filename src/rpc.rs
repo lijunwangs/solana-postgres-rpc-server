@@ -77,7 +77,7 @@ pub mod rpc_accounts {
 
         fn get_account_info(
             &self,
-            meta: Self::Metadata,
+            mut meta: Self::Metadata,
             pubkey_str: String,
             config: Option<RpcAccountInfoConfig>,
         ) -> Result<RpcResponse<Option<UiAccount>>> {
