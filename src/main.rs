@@ -184,7 +184,15 @@ pub fn main() {
     let rpc_niceness_adj = value_t_or_exit!(matches, "rpc_niceness_adj", i8);
 
     let db_config = value_t!(matches, "db_config", String).expect("db-config is required");
-    let db_config = PostgresRpcServerConfig::load_config_from_file(&db_config).unwrap();
+    let db_config =
+        PostgresRpcServerConfig::load_config_from_file(&db_config).unwrap_or_else(|err| {
+            println!(
+                "Could not load the configuration file from {:?}, error: {}",
+                db_config, err
+            );
+            std::process::exit(1);
+        });
+
     let db_client = SimplePostgresClient::new(&db_config).unwrap();
 
     let config = JsonRpcConfig {
