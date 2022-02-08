@@ -33,6 +33,7 @@ solana-client = { version = "=1.9.5" }
 solana-clap-utils = { version = "=1.9.5" }
 solana-logger = { version = "=1.9.5" }
 solana-net-utils = { version = "=1.9.5" }
+solana-perf = { version = "=1.9.5" }
 solana-sdk = { version = "=1.9.5" }
 solana-accountsdb-plugin-postgres = {version = "=1.9.5"}
 thiserror = "1.0.30"

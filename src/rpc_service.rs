@@ -13,6 +13,7 @@ use {
         RequestMiddlewareAction, ServerBuilder,
     },
     log::*,
+    solana_perf::thread::renice_this_thread,
     std::{
         net::SocketAddr,
         sync::Arc,
@@ -30,38 +31,6 @@ pub struct JsonRpcConfig {
     pub rpc_threads: usize,
     pub rpc_niceness_adj: i8,
 }
-
-/// Adds `adjustment` to the nice value of calling thread. Negative `adjustment` increases priority,
-/// positive `adjustment` decreases priority. New thread inherits nice value from current thread
-/// when created.
-///
-/// Fails on non-Linux systems for all `adjustment` values except of zero.
-#[cfg(target_os = "linux")]
-pub fn renice_this_thread(adjustment: i8) -> Result<(), String> {
-    // On Linux, the nice value is a per-thread attribute. See `man 7 sched` for details.
-    // Other systems probably should use pthread_setschedprio(), but, on Linux, thread priority
-    // is fixed to zero for SCHED_OTHER threads (which is the default).
-    nice(adjustment)
-        .map(|_| ())
-        .map_err(|err| format!("Failed to change thread's nice value: {}", err))
-}
-
-/// Adds `adjustment` to the nice value of calling thread. Negative `adjustment` increases priority,
-/// positive `adjustment` decreases priority. New thread inherits nice value from current thread
-/// when created.
-///
-/// Fails on non-Linux systems for all `adjustment` values except of zero.
-#[cfg(not(target_os = "linux"))]
-fn renice_this_thread(adjustment: i8) -> Result<(), String> {
-    if adjustment == 0 {
-        Ok(())
-    } else {
-        Err(String::from(
-            "Failed to change thread's nice value: only supported on Linux",
-        ))
-    }
-}
-
 struct RpcRequestMiddleware;
 
 impl RpcRequestMiddleware {
