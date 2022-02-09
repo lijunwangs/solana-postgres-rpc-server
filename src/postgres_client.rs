@@ -62,7 +62,7 @@ pub struct SimplePostgresClient {
 }
 
 impl SimplePostgresClient {
-     pub async fn connect_to_db <T> (
+     pub async fn connect_to_db (
         config: &PostgresRpcServerConfig,
     ) -> Result<(Client, Connection<Socket, NoTlsStream>), PostgresRpcServerError> 
     {
@@ -124,21 +124,21 @@ impl SimplePostgresClient {
         }
     }
 
-    pub fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
+    pub async fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
         info!("Creating SimplePostgresClient...");
-        let mut client = Self::connect_to_db(config)?;
-        let get_account_stmt = Self::build_get_account_stmt(&mut client, config)?;
+        let mut client = Self::connect_to_db(config).await?;
+        let get_account_stmt = Self::build_get_account_stmt(&mut client.0, config).await?;
 
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
-                client,
+                client: client.0,
                 get_account_stmt,
             }),
         })
     }
 
-    pub fn get_account(
+    pub async fn get_account(
         &mut self,
         pubkey: &Pubkey,
     ) -> Result<DbAccountInfo, PostgresRpcServerError> {
@@ -146,7 +146,7 @@ impl SimplePostgresClient {
         let statement = &client.get_account_stmt;
         let client = &mut client.client;
         let pubkey_v = pubkey.to_bytes().to_vec();
-        let result = client.query(statement, &[&pubkey_v]);
+        let result = client.query(statement, &[&pubkey_v]).await;
         match result {
             Err(error) => {
                 let msg = format!(

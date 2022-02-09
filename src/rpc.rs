@@ -83,7 +83,7 @@ pub mod rpc_accounts {
         ) -> Result<RpcResponse<Option<UiAccount>>> {
             debug!("get_account_info rpc request received: {:?}", pubkey_str);
             let pubkey = verify_pubkey(&pubkey_str)?;
-            meta.get_account_info(&pubkey, config)
+            meta.get_account_info(&pubkey, config).await
         }
 
         fn get_multiple_accounts(

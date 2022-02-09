@@ -31,13 +31,13 @@ impl JsonRpcRequestProcessor {
         }
     }
 
-    pub fn get_account_info(
+    pub async fn get_account_info(
         &mut self,
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
         info!("getting account_info is called... {}", pubkey);
-        let result = self.db_client.write().unwrap().get_account(pubkey);
+        let result = self.db_client.write().unwrap().get_account(pubkey).await;
         match result {
             Ok(account) => {
                 let config = config.unwrap_or_default();
