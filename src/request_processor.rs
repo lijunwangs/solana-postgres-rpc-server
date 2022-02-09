@@ -2,7 +2,7 @@ use {
     crate::{
         postgres_client::SimplePostgresClient, rpc::OptionalContext, rpc_service::JsonRpcConfig,
     },
-    jsonrpc_core::{types::Error, Metadata, Result},
+    jsonrpc_core::{futures::lock::Mutex, types::Error, Metadata, Result},
     log::*,
     solana_account_decoder::{UiAccount, UiAccountEncoding},
     solana_client::{
@@ -17,7 +17,7 @@ use {
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
     pub config: JsonRpcConfig,
-    pub db_client: Arc<RwLock<SimplePostgresClient>>,
+    pub db_client: Arc<Mutex<SimplePostgresClient>>,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
@@ -27,7 +27,7 @@ impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         Self {
             config,
-            db_client: Arc::new(RwLock::new(db_client)),
+            db_client: Arc::new(Mutex::new(db_client)),
         }
     }
 
@@ -37,7 +37,8 @@ impl JsonRpcRequestProcessor {
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
         info!("getting account_info is called... {}", pubkey);
-        let result = self.db_client.write().unwrap().get_account(pubkey).await;
+        let mut client = self.db_client.lock().await;
+        let result = client.get_account(pubkey).await;
         match result {
             Ok(account) => {
                 let config = config.unwrap_or_default();

@@ -77,7 +77,8 @@ pub fn redirect_stderr_to_file(logfile: Option<String>) -> Option<JoinHandle<()>
 }
 
 #[allow(unused_variables)]
-pub fn main() {
+#[tokio::main]
+pub async fn main() {
     let default_rpc_max_multiple_accounts = &MAX_MULTIPLE_ACCOUNTS.to_string();
     let default_rpc_threads = num_cpus::get().to_string();
 
@@ -194,7 +195,7 @@ pub fn main() {
             std::process::exit(1);
         });
 
-    let db_client = SimplePostgresClient::new(&db_config).unwrap_or_else(|err| {
+    let db_client = SimplePostgresClient::new(&db_config).await.unwrap_or_else(|err| {
         println!(
             "Could not connect to the database server. Please review the \
             configuration information. Error details: ({})",
