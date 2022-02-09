@@ -103,8 +103,9 @@ impl SimplePostgresClient {
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE pubkey = $1";
-
+        info!("Preparing statement {}", stmt);
         let stmt = client.prepare(stmt).await;
+        info!("Prepared statement, ok? {}", stmt.is_ok());
 
         match stmt {
             Err(err) => {
@@ -121,13 +122,22 @@ impl SimplePostgresClient {
 
     pub async fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
         info!("Creating SimplePostgresClient...");
-        let mut client = Self::connect_to_db(config).await?;
-        let get_account_stmt = Self::build_get_account_stmt(&mut client.0, config).await?;
+        let (mut client, connection) = Self::connect_to_db(config).await?;
+
+        // The connection object performs the actual communication with the database,
+        // so spawn it off to run on its own.
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                error!("connection error: {}", e);
+            }
+        });
+
+        let get_account_stmt = Self::build_get_account_stmt(&mut client, config).await?;
 
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
-                client: client.0,
+                client,
                 get_account_stmt,
             }),
         })
