@@ -4,11 +4,21 @@ use {
         postgres_rpc_server_error::PostgresRpcServerError,
     },
     log::*,
-    openssl::ssl::{SslConnector, SslFiletype, SslMethod},
-    postgres::{Client, NoTls, Statement},
-    postgres_openssl::MakeTlsConnector,
+    native_tls::{Certificate, Identity, TlsConnector},
+    //openssl::ssl::{SslConnector, SslFiletype, SslMethod},
+    //postgres::{Client, NoTls, Statement},
+    //postgres_openssl::MakeTlsConnector,
+    postgres_native_tls::MakeTlsConnector,
     solana_sdk::{account::ReadableAccount, clock::Epoch, pubkey::Pubkey},
-    std::sync::Mutex,
+    std::{fs, sync::Mutex},
+    tokio_postgres::{
+        config::{Config},
+        error::Error,
+        Socket,
+        tls::{NoTls, MakeTlsConnect, TlsConnect},        
+        Client, Connection, Statement
+    }
+    
 };
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
@@ -59,9 +69,11 @@ pub struct SimplePostgresClient {
 }
 
 impl SimplePostgresClient {
-    pub fn connect_to_db(
+     pub async fn connect_to_db <T> (
         config: &PostgresRpcServerConfig,
-    ) -> Result<Client, PostgresRpcServerError> {
+    ) -> Result<(Client, Connection<Socket, T::Stream>), PostgresRpcServerError> 
+    where T: MakeTlsConnect<Socket>
+    {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
         let connection_str = if let Some(connection_str) = &config.connection_str {
@@ -95,53 +107,27 @@ impl SimplePostgresClient {
                 let msg = "\"client_key\" must be specified when \"use_ssl\" is set".to_string();
                 return Err(PostgresRpcServerError::ConfigurationError { msg });
             }
-            let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
-            if let Err(err) = builder.set_ca_file(config.server_ca.as_ref().unwrap()) {
-                let msg = format!(
-                    "Failed to set the server certificate specified by \"server_ca\": {}. Error: ({})",
-                    config.server_ca.as_ref().unwrap(), err);
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
-            }
-            if let Err(err) =
-                builder.set_certificate_file(config.client_cert.as_ref().unwrap(), SslFiletype::PEM)
-            {
-                let msg = format!(
-                    "Failed to set the client certificate specified by \"client_cert\": {}. Error: ({})",
-                    config.client_cert.as_ref().unwrap(), err);
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
-            }
-            if let Err(err) =
-                builder.set_private_key_file(config.client_key.as_ref().unwrap(), SslFiletype::PEM)
-            {
-                let msg = format!(
-                    "Failed to set the client key specified by \"client_key\": {}. Error: ({})",
-                    config.client_key.as_ref().unwrap(),
-                    err
-                );
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
-            }
 
-            let mut connector = MakeTlsConnector::new(builder.build());
-            connector.set_callback(|connect_config, _domain| {
-                connect_config.set_verify_hostname(false);
-                Ok(())
-            });
-            Client::connect(&connection_str, connector)
+            let cert = fs::read(config.server_ca.as_ref().unwrap())?;
+            let cert = Certificate::from_pem(&cert).unwrap();
+
+            // The identity need to be a PKCS12 format file:
+            // e.g. openssl pkcs12 -export -out identity.pfx -inkey key.pem -in cert.pem -certfile chain_certs.pem
+            let key = fs::read(config.client_key.as_ref().unwrap()).unwrap();
+            let identity = Identity::from_pkcs12(&key, &"").unwrap();
+
+            let connector = TlsConnector::builder()
+                .add_root_certificate(cert)
+                .identity(identity)
+                .build().unwrap();
+
+            let connector = MakeTlsConnector::new(connector);
+            tokio_postgres::connect(&connection_str, connector)
         } else {
-            Client::connect(&connection_str, NoTls)
+            tokio_postgres::connect(&connection_str, NoTls)
         };
 
-        match result {
-            Err(err) => {
-                let msg = format!(
-                    "Error in connecting to the PostgreSQL database: {:?} connection_str: {:?}",
-                    err, connection_str
-                );
-                error!("{}", msg);
-                Err(PostgresRpcServerError::DataStoreConnectionError { msg })
-            }
-            Ok(client) => Ok(client),
-        }
+        result
     }
 
     fn build_get_account_stmt(

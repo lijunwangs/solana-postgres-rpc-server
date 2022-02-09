@@ -18,16 +18,16 @@ jsonrpc-derive = "18.0.0"
 jsonrpc-http-server = "18.0.0"
 jsonrpc-server-utils= "18.0.0"
 log = "0.4.14"
+native-tls = "0.2.8"
 num_cpus = "1.13.1"
 openssl = { version = "0.10" }
 postgres = { version = "0.19.2", features = ["with-chrono-0_4"] }
+postgres-native-tls = { version = "0.5.0", features = ["runtime"] }
 postgres-types = { version = "0.2.2", features = ["derive"] }
 postgres-openssl = { version = "0.5.0"}
 serde = "1.0.133"
 serde_derive = "1.0.103"
 serde_json = "1.0.74"
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.6", features = ["codec", "compat"] }
 solana-account-decoder = { version = "=1.9.5" }
 solana-client = { version = "=1.9.5" }
 solana-clap-utils = { version = "=1.9.5" }
@@ -37,6 +37,9 @@ solana-perf = { version = "=1.9.5" }
 solana-sdk = { version = "=1.9.5" }
 solana-accountsdb-plugin-postgres = {version = "=1.9.5"}
 thiserror = "1.0.30"
+tokio = { version = "1", features = ["full"] }
+tokio-postgres = { version = "0.7.5", features = ["runtime"] }
+tokio-util = { version = "0.6", features = ["codec", "compat"] }
 
 [target."cfg(unix)".dependencies]
 libc = "0.2.115"
