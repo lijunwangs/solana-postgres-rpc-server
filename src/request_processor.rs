@@ -11,7 +11,7 @@ use {
         rpc_response::{Response as RpcResponse, *},
     },
     solana_sdk::pubkey::Pubkey,
-    std::sync::{Arc, RwLock},
+    std::sync::Arc,
 };
 
 #[derive(Clone)]
