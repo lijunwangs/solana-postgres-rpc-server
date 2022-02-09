@@ -21,7 +21,7 @@ pub struct DbAccountInfo {
     pub pubkey: Pubkey,
     pub lamports: i64,
     pub owner: Vec<u8>,
-    pub executable: i8,
+    pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
     pub slot: i64,
@@ -42,7 +42,7 @@ impl ReadableAccount for DbAccountInfo {
     }
 
     fn executable(&self) -> bool {
-        self.executable == 1
+        self.executable
     }
 
     fn rent_epoch(&self) -> Epoch {
@@ -171,12 +171,12 @@ impl SimplePostgresClient {
                 1 => {
                     Ok(DbAccountInfo {
                         pubkey: Pubkey::new(result[0].get(0)),
-                        lamports: result[0].get(1),
+                        lamports: result[0].get(3),
                         owner: result[0].get(2),
-                        executable: result[0].get(3),
-                        rent_epoch: result[0].get(4),
-                        data: result[0].get(5),
-                        slot: result[0].get(6),
+                        executable: result[0].get(4),
+                        rent_epoch: result[0].get(5),
+                        data: result[0].get(6),
+                        slot: result[0].get(1),
                         write_version: result[0].get(7),
                     })
                 }
