@@ -38,21 +38,6 @@ impl RpcRequestMiddleware {
         Self {}
     }
 
-    fn redirect(location: &str) -> hyper::Response<hyper::Body> {
-        hyper::Response::builder()
-            .status(hyper::StatusCode::SEE_OTHER)
-            .header(hyper::header::LOCATION, location)
-            .body(hyper::Body::from(String::from(location)))
-            .unwrap()
-    }
-
-    fn not_found() -> hyper::Response<hyper::Body> {
-        hyper::Response::builder()
-            .status(hyper::StatusCode::NOT_FOUND)
-            .body(hyper::Body::empty())
-            .unwrap()
-    }
-
     #[allow(dead_code)]
     fn internal_server_error() -> hyper::Response<hyper::Body> {
         hyper::Response::builder()
