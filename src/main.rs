@@ -194,13 +194,14 @@ pub fn main() {
             std::process::exit(1);
         });
 
-    let db_client = SimplePostgresClient::new(&db_config).unwrap_or_else(
-        |err| {
-            println!("Could not connect to the database server. Please review the \
-            configuration information. Error details: ({})", err);
-            std::process::exit(1);
-        }
-    );
+    let db_client = SimplePostgresClient::new(&db_config).unwrap_or_else(|err| {
+        println!(
+            "Could not connect to the database server. Please review the \
+            configuration information. Error details: ({})",
+            err
+        );
+        std::process::exit(1);
+    });
 
     let config = JsonRpcConfig {
         max_multiple_accounts,

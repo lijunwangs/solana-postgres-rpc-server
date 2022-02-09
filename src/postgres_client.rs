@@ -5,13 +5,11 @@ use {
     },
     log::*,
     solana_sdk::{account::ReadableAccount, clock::Epoch, pubkey::Pubkey},
-    std::{sync::Mutex},
+    std::sync::Mutex,
     tokio_postgres::{
-        Socket,
-        tls::{NoTls, NoTlsStream,},
-        Client, Connection, Statement
-    }
-    
+        tls::{NoTls, NoTlsStream},
+        Client, Connection, Socket, Statement,
+    },
 };
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
@@ -62,10 +60,9 @@ pub struct SimplePostgresClient {
 }
 
 impl SimplePostgresClient {
-     pub async fn connect_to_db (
+    pub async fn connect_to_db(
         config: &PostgresRpcServerConfig,
-    ) -> Result<(Client, Connection<Socket, NoTlsStream>), PostgresRpcServerError> 
-    {
+    ) -> Result<(Client, Connection<Socket, NoTlsStream>), PostgresRpcServerError> {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
         let connection_str = if let Some(connection_str) = &config.connection_str {
@@ -89,15 +86,13 @@ impl SimplePostgresClient {
         let result = tokio_postgres::connect(&connection_str, NoTls).await;
 
         match result {
-            Ok(result) => {
-                Ok(result)
-            }
+            Ok(result) => Ok(result),
             Err(err) => {
                 let msg = format!(
                     "Error in connecting database \"connection_str\": {:?}, or \"host\": {:?} \"user\": {:?}: {}",
                     config.connection_str, config.host, config.user, err
                 );
-                Err(PostgresRpcServerError::DataStoreConnectionError {msg})
+                Err(PostgresRpcServerError::DataStoreConnectionError { msg })
             }
         }
     }

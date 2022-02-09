@@ -1,6 +1,6 @@
 use {
     crate::request_processor::JsonRpcRequestProcessor,
-    jsonrpc_core::{Error, Result},
+    jsonrpc_core::{futures::future, BoxFuture, Error, Result},
     jsonrpc_derive::rpc,
     log::*,
     serde::{Deserialize, Serialize},
@@ -51,7 +51,7 @@ pub mod rpc_accounts {
             meta: Self::Metadata,
             pubkey_str: String,
             config: Option<RpcAccountInfoConfig>,
-        ) -> Result<RpcResponse<Option<UiAccount>>>;
+        ) -> BoxFuture<Result<RpcResponse<Option<UiAccount>>>>;
 
         #[rpc(meta, name = "getMultipleAccounts")]
         fn get_multiple_accounts(
@@ -80,10 +80,13 @@ pub mod rpc_accounts {
             mut meta: Self::Metadata,
             pubkey_str: String,
             config: Option<RpcAccountInfoConfig>,
-        ) -> Result<RpcResponse<Option<UiAccount>>> {
+        ) -> BoxFuture<Result<RpcResponse<Option<UiAccount>>>> {
             debug!("get_account_info rpc request received: {:?}", pubkey_str);
-            let pubkey = verify_pubkey(&pubkey_str)?;
-            meta.get_account_info(&pubkey, config).await
+            let pubkey = verify_pubkey(&pubkey_str);
+            match pubkey {
+                Err(err) => Box::pin(future::err(err)),
+                Ok(pubkey) => Box::pin(async move { meta.get_account_info(&pubkey, config).await }),
+            }
         }
 
         fn get_multiple_accounts(
