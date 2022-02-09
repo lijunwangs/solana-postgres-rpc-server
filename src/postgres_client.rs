@@ -4,18 +4,11 @@ use {
         postgres_rpc_server_error::PostgresRpcServerError,
     },
     log::*,
-    native_tls::{Certificate, Identity, TlsConnector},
-    //openssl::ssl::{SslConnector, SslFiletype, SslMethod},
-    //postgres::{Client, NoTls, Statement},
-    //postgres_openssl::MakeTlsConnector,
-    postgres_native_tls::MakeTlsConnector,
     solana_sdk::{account::ReadableAccount, clock::Epoch, pubkey::Pubkey},
-    std::{fs, sync::Mutex},
+    std::{sync::Mutex},
     tokio_postgres::{
-        config::{Config},
-        error::Error,
         Socket,
-        tls::{NoTls, MakeTlsConnect, TlsConnect},        
+        tls::{NoTls, NoTlsStream,},
         Client, Connection, Statement
     }
     
@@ -71,8 +64,7 @@ pub struct SimplePostgresClient {
 impl SimplePostgresClient {
      pub async fn connect_to_db <T> (
         config: &PostgresRpcServerConfig,
-    ) -> Result<(Client, Connection<Socket, T::Stream>), PostgresRpcServerError> 
-    where T: MakeTlsConnect<Socket>
+    ) -> Result<(Client, Connection<Socket, NoTlsStream>), PostgresRpcServerError> 
     {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
@@ -94,50 +86,30 @@ impl SimplePostgresClient {
             )
         };
 
-        let result = if let Some(true) = config.use_ssl {
-            if config.server_ca.is_none() {
-                let msg = "\"server_ca\" must be specified when \"use_ssl\" is set".to_string();
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
+        let result = tokio_postgres::connect(&connection_str, NoTls).await;
+
+        match result {
+            Ok(result) => {
+                Ok(result)
             }
-            if config.client_cert.is_none() {
-                let msg = "\"client_cert\" must be specified when \"use_ssl\" is set".to_string();
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
+            Err(err) => {
+                let msg = format!(
+                    "Error in connecting database \"connection_str\": {:?}, or \"host\": {:?} \"user\": {:?}: {}",
+                    config.connection_str, config.host, config.user, err
+                );
+                Err(PostgresRpcServerError::DataStoreConnectionError {msg})
             }
-            if config.client_key.is_none() {
-                let msg = "\"client_key\" must be specified when \"use_ssl\" is set".to_string();
-                return Err(PostgresRpcServerError::ConfigurationError { msg });
-            }
-
-            let cert = fs::read(config.server_ca.as_ref().unwrap())?;
-            let cert = Certificate::from_pem(&cert).unwrap();
-
-            // The identity need to be a PKCS12 format file:
-            // e.g. openssl pkcs12 -export -out identity.pfx -inkey key.pem -in cert.pem -certfile chain_certs.pem
-            let key = fs::read(config.client_key.as_ref().unwrap()).unwrap();
-            let identity = Identity::from_pkcs12(&key, &"").unwrap();
-
-            let connector = TlsConnector::builder()
-                .add_root_certificate(cert)
-                .identity(identity)
-                .build().unwrap();
-
-            let connector = MakeTlsConnector::new(connector);
-            tokio_postgres::connect(&connection_str, connector)
-        } else {
-            tokio_postgres::connect(&connection_str, NoTls)
-        };
-
-        result
+        }
     }
 
-    fn build_get_account_stmt(
+    async fn build_get_account_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE pubkey = $1";
 
-        let stmt = client.prepare(stmt);
+        let stmt = client.prepare(stmt).await;
 
         match stmt {
             Err(err) => {
