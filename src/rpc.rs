@@ -67,7 +67,7 @@ pub mod rpc_accounts {
             meta: Self::Metadata,
             program_id_str: String,
             config: Option<RpcProgramAccountsConfig>,
-        ) -> Result<OptionalContext<Vec<RpcKeyedAccount>>>;
+        ) -> BoxFuture<Result<OptionalContext<Vec<RpcKeyedAccount>>>>;
     }
 
     pub struct AccountsDataImpl;
@@ -122,12 +122,16 @@ pub mod rpc_accounts {
             meta: Self::Metadata,
             program_id_str: String,
             config: Option<RpcProgramAccountsConfig>,
-        ) -> Result<OptionalContext<Vec<RpcKeyedAccount>>> {
+        ) -> BoxFuture<Result<OptionalContext<Vec<RpcKeyedAccount>>>> {
             debug!(
                 "get_program_accounts rpc request received: {:?}",
                 program_id_str
             );
-            let program_id = verify_pubkey(&program_id_str)?;
+            let result = verify_pubkey(&program_id_str);
+            if let Err(err) = result {
+                return Box::pin(future::err(err));
+            }
+            let program_id = result.unwrap();
             let (config, filters, with_context) = if let Some(config) = config {
                 (
                     Some(config.account_config),
@@ -138,15 +142,22 @@ pub mod rpc_accounts {
                 (None, vec![], false)
             };
             if filters.len() > MAX_GET_PROGRAM_ACCOUNT_FILTERS {
-                return Err(Error::invalid_params(format!(
+                let err = Error::invalid_params(format!(
                     "Too many filters provided; max {}",
                     MAX_GET_PROGRAM_ACCOUNT_FILTERS
-                )));
+                ));
+                return Box::pin(future::err(err));
             }
             for filter in &filters {
-                verify_filter(filter)?;
+                let result = verify_filter(filter);
+                if let Err(err) = result {
+                    return Box::pin(future::err(err));
+                }
             }
-            meta.get_program_accounts(&program_id, config, filters, with_context)
+            Box::pin(async move {
+                meta.get_program_accounts(&program_id, config, filters, with_context)
+                    .await
+            })
         }
     }
 }
