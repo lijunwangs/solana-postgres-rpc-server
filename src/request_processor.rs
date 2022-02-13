@@ -4,13 +4,24 @@ use {
     },
     jsonrpc_core::{futures::lock::Mutex, types::error, types::Error, Metadata, Result},
     log::*,
-    solana_account_decoder::{UiAccount, UiAccountEncoding, UiDataSliceConfig, MAX_BASE58_BYTES},
+    solana_account_decoder::{
+        parse_token::is_known_spl_token_id, UiAccount, UiAccountEncoding, UiDataSliceConfig,
+        MAX_BASE58_BYTES,
+    },
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
-        rpc_filter::RpcFilterType,
+        rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
         rpc_response::{Response as RpcResponse, *},
     },
-    solana_sdk::{account::ReadableAccount, pubkey::Pubkey},
+    solana_runtime::inline_spl_token::{
+        SPL_TOKEN_ACCOUNT_MINT_OFFSET, SPL_TOKEN_ACCOUNT_OWNER_OFFSET,
+    },
+    solana_sdk::{
+        account::ReadableAccount,
+        program_pack::Pack,
+        pubkey::{Pubkey, PUBKEY_BYTES},
+    },
+    spl_token::state::Account as TokenAccount,
     std::sync::Arc,
 };
 
@@ -41,6 +52,90 @@ fn encode_account<T: ReadableAccount>(
         Ok(UiAccount::encode(
             pubkey, account, encoding, None, data_slice,
         ))
+    }
+}
+
+/// Analyze custom filters to determine if the result will be a subset of spl-token accounts by
+/// owner.
+/// NOTE: `optimize_filters()` should almost always be called before using this method because of
+/// the strict match on `MemcmpEncodedBytes::Bytes`.
+fn get_spl_token_owner_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> Option<Pubkey> {
+    if !is_known_spl_token_id(program_id) {
+        return None;
+    }
+    let mut data_size_filter: Option<u64> = None;
+    let mut owner_key: Option<Pubkey> = None;
+    let mut incorrect_owner_len: Option<usize> = None;
+    for filter in filters {
+        match filter {
+            RpcFilterType::DataSize(size) => data_size_filter = Some(*size),
+            RpcFilterType::Memcmp(Memcmp {
+                offset: SPL_TOKEN_ACCOUNT_OWNER_OFFSET,
+                bytes: MemcmpEncodedBytes::Bytes(bytes),
+                ..
+            }) => {
+                if bytes.len() == PUBKEY_BYTES {
+                    owner_key = Some(Pubkey::new(bytes));
+                } else {
+                    incorrect_owner_len = Some(bytes.len());
+                }
+            }
+            _ => {}
+        }
+    }
+    if data_size_filter == Some(TokenAccount::get_packed_len() as u64) {
+        if let Some(incorrect_owner_len) = incorrect_owner_len {
+            info!(
+                "Incorrect num bytes ({:?}) provided for spl_token_owner_filter",
+                incorrect_owner_len
+            );
+        }
+        owner_key
+    } else {
+        debug!("spl_token program filters do not match by-owner index requisites");
+        None
+    }
+}
+
+/// Analyze custom filters to determine if the result will be a subset of spl-token accounts by
+/// mint.
+/// NOTE: `optimize_filters()` should almost always be called before using this method because of
+/// the strict match on `MemcmpEncodedBytes::Bytes`.
+fn get_spl_token_mint_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> Option<Pubkey> {
+    if !is_known_spl_token_id(program_id) {
+        return None;
+    }
+    let mut data_size_filter: Option<u64> = None;
+    let mut mint: Option<Pubkey> = None;
+    let mut incorrect_mint_len: Option<usize> = None;
+    for filter in filters {
+        match filter {
+            RpcFilterType::DataSize(size) => data_size_filter = Some(*size),
+            RpcFilterType::Memcmp(Memcmp {
+                offset: SPL_TOKEN_ACCOUNT_MINT_OFFSET,
+                bytes: MemcmpEncodedBytes::Bytes(bytes),
+                ..
+            }) => {
+                if bytes.len() == PUBKEY_BYTES {
+                    mint = Some(Pubkey::new(bytes));
+                } else {
+                    incorrect_mint_len = Some(bytes.len());
+                }
+            }
+            _ => {}
+        }
+    }
+    if data_size_filter == Some(TokenAccount::get_packed_len() as u64) {
+        if let Some(incorrect_mint_len) = incorrect_mint_len {
+            info!(
+                "Incorrect num bytes ({:?}) provided for spl_token_mint_filter",
+                incorrect_mint_len
+            );
+        }
+        mint
+    } else {
+        debug!("spl_token program filters do not match by-mint index requisites");
+        None
     }
 }
 
@@ -124,7 +219,7 @@ impl JsonRpcRequestProcessor {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                Ok(result).map(|result| OptionalContext::NoContext(result))
+                Ok(result).map(OptionalContext::NoContext)
             }
             Err(err) => Err(Error::internal_error()),
         }

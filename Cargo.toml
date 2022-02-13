@@ -28,14 +28,16 @@ postgres-openssl = { version = "0.5.0"}
 serde = "1.0.133"
 serde_derive = "1.0.103"
 serde_json = "1.0.74"
-solana-account-decoder = { version = "=1.9.5" }
-solana-client = { version = "=1.9.5" }
-solana-clap-utils = { version = "=1.9.5" }
-solana-logger = { version = "=1.9.5" }
-solana-net-utils = { version = "=1.9.5" }
-solana-perf = { version = "=1.9.5" }
-solana-sdk = { version = "=1.9.5" }
-solana-accountsdb-plugin-postgres = {version = "=1.9.5"}
+solana-accountsdb-plugin-postgres = {version = "=1.9.6"}
+solana-account-decoder = { version = "=1.9.6" }
+solana-client = { version = "=1.9.6" }
+solana-clap-utils = { version = "=1.9.6" }
+solana-logger = { version = "=1.9.6" }
+solana-net-utils = { version = "=1.9.6" }
+solana-perf = { version = "=1.9.6" }
+solana-sdk = { version = "=1.9.6" }
+solana-runtime = { version = "=1.9.6" }
+spl-token = { version = "=3.2.0", features = ["no-entrypoint"] }
 thiserror = "1.0.30"
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = { version = "0.7.5", features = ["runtime"] }
