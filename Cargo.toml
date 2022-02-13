@@ -11,6 +11,8 @@ documentation = "https://docs.rs/solana-postgres-rpc-server"
 default-run = "solana-postgres-rpc-server"
 
 [dependencies]
+base64 = "0.12.3"
+bs58 = "0.4.0"
 clap = "2.33.1"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0", features = ["ipc", "ws"] }

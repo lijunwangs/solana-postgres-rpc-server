@@ -33,6 +33,47 @@ pub struct JsonRpcRequestProcessor {
 
 impl Metadata for JsonRpcRequestProcessor {}
 
+fn check_slice_and_encoding(encoding: &UiAccountEncoding, data_slice_is_some: bool) -> Result<()> {
+    match encoding {
+        UiAccountEncoding::JsonParsed => {
+            if data_slice_is_some {
+                let message =
+                    "Sliced account data can only be encoded using binary (base 58) or base64 encoding."
+                        .to_string();
+                Err(error::Error {
+                    code: error::ErrorCode::InvalidRequest,
+                    message,
+                    data: None,
+                })
+            } else {
+                Ok(())
+            }
+        }
+        UiAccountEncoding::Binary
+        | UiAccountEncoding::Base58
+        | UiAccountEncoding::Base64
+        | UiAccountEncoding::Base64Zstd => Ok(()),
+    }
+}
+
+fn optimize_filters(filters: &mut Vec<RpcFilterType>) {
+    filters.iter_mut().for_each(|filter_type| {
+        if let RpcFilterType::Memcmp(compare) = filter_type {
+            use MemcmpEncodedBytes::*;
+            match &compare.bytes {
+                #[allow(deprecated)]
+                Binary(bytes) | Base58(bytes) => {
+                    compare.bytes = Bytes(bs58::decode(bytes).into_vec().unwrap());
+                }
+                Base64(bytes) => {
+                    compare.bytes = Bytes(base64::decode(bytes).unwrap());
+                }
+                _ => {}
+            }
+        }
+    })
+}
+
 fn encode_account<T: ReadableAccount>(
     account: &T,
     pubkey: &Pubkey,
@@ -188,6 +229,54 @@ impl JsonRpcRequestProcessor {
         Err(Error::internal_error())
     }
 
+    // /// Get an iterator of spl-token accounts by owner address
+    // fn get_filtered_spl_token_accounts_by_owner(
+    //     &self,
+    //     accounts: Vec<RpcKeyedAccount>,
+    //     program_id: &Pubkey,
+    //     owner_key: &Pubkey,
+    //     mut filters: Vec<RpcFilterType>,
+    // ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
+    //     // The by-owner accounts index checks for Token Account state and Owner address on
+    //     // inclusion. However, due to the current AccountsDb implementation, an account may remain
+    //     // in storage as a zero-lamport AccountSharedData::Default() after being wiped and reinitialized in
+    //     // later updates. We include the redundant filters here to avoid returning these accounts.
+    //     //
+    //     // Filter on Token Account state
+    //     filters.push(RpcFilterType::DataSize(
+    //         TokenAccount::get_packed_len() as u64
+    //     ));
+    //     // Filter on Owner address
+    //     filters.push(RpcFilterType::Memcmp(Memcmp {
+    //         offset: SPL_TOKEN_ACCOUNT_OWNER_OFFSET,
+    //         bytes: MemcmpEncodedBytes::Bytes(owner_key.to_bytes().into()),
+    //         encoding: None,
+    //     }));
+
+
+    //     Ok(bank
+    //         .get_filtered_indexed_accounts(
+    //             &IndexKey::SplTokenOwner(*owner_key),
+    //             |account| {
+    //                 account.owner() == program_id
+    //                     && filters.iter().all(|filter_type| match filter_type {
+    //                         RpcFilterType::DataSize(size) => {
+    //                             account.data().len() as u64 == *size
+    //                         }
+    //                         RpcFilterType::Memcmp(compare) => {
+    //                             compare.bytes_match(account.data())
+    //                         }
+    //                     })
+    //             },
+    //             &ScanConfig::default(),
+    //             bank.byte_limit_for_scans(),
+    //         )
+    //         .map_err(|e| RpcCustomError::ScanError {
+    //             message: e.to_string(),
+    //         })?)
+
+    // }
+
     #[allow(unused_mut)]
     pub async fn get_program_accounts(
         &self,
@@ -204,6 +293,8 @@ impl JsonRpcRequestProcessor {
                 let config = config.unwrap_or_default();
                 let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
                 let data_slice_config = config.data_slice;
+                check_slice_and_encoding(&encoding, data_slice_config.is_some())?;
+                optimize_filters(&mut filters);
                 let result = accounts
                     .into_iter()
                     .map(|account| {
@@ -218,6 +309,16 @@ impl JsonRpcRequestProcessor {
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
+
+                // let accounts = {
+                //     if let Some(owner) = get_spl_token_owner_filter(program_id, &filters) {
+                //         self.get_filtered_spl_token_accounts_by_owner(result, program_id, &owner, filters)?
+                //     } else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
+                //         self.get_filtered_spl_token_accounts_by_mint(result, program_id, &mint, filters)?
+                //     } else {
+                //         self.get_filtered_program_accounts(result, program_id, filters)?
+                //     }
+                // }
 
                 Ok(result).map(OptionalContext::NoContext)
             }
