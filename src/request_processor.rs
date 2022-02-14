@@ -10,6 +10,7 @@ use {
     },
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
+        rpc_custom_error::RpcCustomError,
         rpc_filter::{Memcmp, MemcmpEncodedBytes, RpcFilterType},
         rpc_response::{Response as RpcResponse, *},
     },
@@ -24,6 +25,8 @@ use {
     spl_token::state::Account as TokenAccount,
     std::sync::Arc,
 };
+
+type RpcCustomResult<T> = std::result::Result<T, RpcCustomError>;
 
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
@@ -229,53 +232,50 @@ impl JsonRpcRequestProcessor {
         Err(Error::internal_error())
     }
 
-    // /// Get an iterator of spl-token accounts by owner address
-    // fn get_filtered_spl_token_accounts_by_owner(
-    //     &self,
-    //     accounts: Vec<RpcKeyedAccount>,
-    //     program_id: &Pubkey,
-    //     owner_key: &Pubkey,
-    //     mut filters: Vec<RpcFilterType>,
-    // ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
-    //     // The by-owner accounts index checks for Token Account state and Owner address on
-    //     // inclusion. However, due to the current AccountsDb implementation, an account may remain
-    //     // in storage as a zero-lamport AccountSharedData::Default() after being wiped and reinitialized in
-    //     // later updates. We include the redundant filters here to avoid returning these accounts.
-    //     //
-    //     // Filter on Token Account state
-    //     filters.push(RpcFilterType::DataSize(
-    //         TokenAccount::get_packed_len() as u64
-    //     ));
-    //     // Filter on Owner address
-    //     filters.push(RpcFilterType::Memcmp(Memcmp {
-    //         offset: SPL_TOKEN_ACCOUNT_OWNER_OFFSET,
-    //         bytes: MemcmpEncodedBytes::Bytes(owner_key.to_bytes().into()),
-    //         encoding: None,
-    //     }));
+    /// Get an iterator of spl-token accounts by owner address
+    fn get_filtered_spl_token_accounts_by_owner(
+        &self,
+        &mut client: SimplePostgresClient,
+        accounts: Vec<RpcKeyedAccount>,
+        program_id: &Pubkey,
+        owner_key: &Pubkey,
+        mut filters: Vec<RpcFilterType>,
+    ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
+        // The by-owner accounts index checks for Token Account state and Owner address on
+        // inclusion. However, due to the current AccountsDb implementation, an account may remain
+        // in storage as a zero-lamport AccountSharedData::Default() after being wiped and reinitialized in
+        // later updates. We include the redundant filters here to avoid returning these accounts.
+        //
+        // Filter on Token Account state
+        filters.push(RpcFilterType::DataSize(
+            TokenAccount::get_packed_len() as u64
+        ));
+        // Filter on Owner address
+        filters.push(RpcFilterType::Memcmp(Memcmp {
+            offset: SPL_TOKEN_ACCOUNT_OWNER_OFFSET,
+            bytes: MemcmpEncodedBytes::Bytes(owner_key.to_bytes().into()),
+            encoding: None,
+        }));
 
+        Ok(client.get_accounts_by_spl_token_owner(
+                &owner_key).map(
+                |account| {
+                    account.owner() == program_id
+                        && filters.iter().all(|filter_type| match filter_type {
+                            RpcFilterType::DataSize(size) => {
+                                account.data().len() as u64 == *size
+                            }
+                            RpcFilterType::Memcmp(compare) => {
+                                compare.bytes_match(account.data())
+                            }
+                        })
+                },
+            ))
+            .map_err(|e| RpcCustomError::ScanError {
+                message: e.to_string(),
+            })?)
 
-    //     Ok(bank
-    //         .get_filtered_indexed_accounts(
-    //             &IndexKey::SplTokenOwner(*owner_key),
-    //             |account| {
-    //                 account.owner() == program_id
-    //                     && filters.iter().all(|filter_type| match filter_type {
-    //                         RpcFilterType::DataSize(size) => {
-    //                             account.data().len() as u64 == *size
-    //                         }
-    //                         RpcFilterType::Memcmp(compare) => {
-    //                             compare.bytes_match(account.data())
-    //                         }
-    //                     })
-    //             },
-    //             &ScanConfig::default(),
-    //             bank.byte_limit_for_scans(),
-    //         )
-    //         .map_err(|e| RpcCustomError::ScanError {
-    //             message: e.to_string(),
-    //         })?)
-
-    // }
+    }
 
     #[allow(unused_mut)]
     pub async fn get_program_accounts(
