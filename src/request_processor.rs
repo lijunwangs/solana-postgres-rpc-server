@@ -233,9 +233,9 @@ impl JsonRpcRequestProcessor {
     }
 
     /// Get an iterator of spl-token accounts by owner address
-    fn get_filtered_spl_token_accounts_by_owner(
+    async fn get_filtered_spl_token_accounts_by_owner(
         &self,
-        &mut client: SimplePostgresClient,
+        mut client: &SimplePostgresClient,
         accounts: Vec<RpcKeyedAccount>,
         program_id: &Pubkey,
         owner_key: &Pubkey,
@@ -258,7 +258,7 @@ impl JsonRpcRequestProcessor {
         }));
 
         Ok(client.get_accounts_by_spl_token_owner(
-                &owner_key).map(
+                &owner_key).await.?.iter().map(
                 |account| {
                     account.owner() == program_id
                         && filters.iter().all(|filter_type| match filter_type {
@@ -270,11 +270,10 @@ impl JsonRpcRequestProcessor {
                             }
                         })
                 },
-            ))
+            )
             .map_err(|e| RpcCustomError::ScanError {
                 message: e.to_string(),
             })?)
-
     }
 
     #[allow(unused_mut)]
