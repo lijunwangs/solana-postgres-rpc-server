@@ -55,6 +55,7 @@ struct PostgresSqlClientWrapper {
     get_account_stmt: Statement,
     get_accounts_by_owner_stmt: Statement,
     get_accounts_by_token_owner_stmt: Statement,
+    get_accounts_by_token_mint_stmt: Statement,
 }
 
 pub struct SimplePostgresClient {
@@ -169,6 +170,29 @@ impl SimplePostgresClient {
         }
     }
 
+    async fn build_get_accounts_by_spl_token_mint_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
+            JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.inner_key\
+            WHERE owner_idx.mint_key = $1";
+        info!("Preparing statement {}", stmt);
+        let stmt = client.prepare(stmt).await;
+        info!("Prepared statement, ok? {}", stmt.is_ok());
+
+        match stmt {
+            Err(err) => {
+                return Err(PostgresRpcServerError::DataSchemaError {
+                    msg: format!(
+                        "Error in preparing for the accounts select by token mint for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                        err, config.host, config.user, config
+                    ),
+                });
+            }
+            Ok(stmt) => Ok(stmt),
+        }
+    }
     pub async fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
         info!("Creating SimplePostgresClient...");
         let (mut client, connection) = Self::connect_to_db(config).await?;
@@ -188,6 +212,9 @@ impl SimplePostgresClient {
         let get_accounts_by_token_owner_stmt =
             Self::build_get_accounts_by_spl_token_owner_stmt(&mut client, config).await?;
 
+        let get_accounts_by_token_mint_stmt =
+            Self::build_get_accounts_by_spl_token_mint_stmt(&mut client, config).await?;
+
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
@@ -195,6 +222,7 @@ impl SimplePostgresClient {
                 get_account_stmt,
                 get_accounts_by_owner_stmt,
                 get_accounts_by_token_owner_stmt,
+                get_accounts_by_token_mint_stmt,
             }),
         })
     }
@@ -287,6 +315,42 @@ impl SimplePostgresClient {
     ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_owner_stmt;
+        let client = &mut client.client;
+        let pubkey_v = owner.to_bytes().to_vec();
+        let result = client.query(statement, &[&pubkey_v]).await;
+        match result {
+            Err(error) => {
+                let msg = format!(
+                    "Failed load the account from the database. Account: {}, Error: ({:?})",
+                    owner, error
+                );
+                Err(PostgresRpcServerError::DatabaseQueryError { msg })
+            }
+            Ok(result) => {
+                let results = result
+                    .into_iter()
+                    .map(|row| DbAccountInfo {
+                        pubkey: Pubkey::new(row.get(0)),
+                        lamports: row.get(3),
+                        owner: row.get(2),
+                        executable: row.get(4),
+                        rent_epoch: row.get(5),
+                        data: row.get(6),
+                        slot: row.get(1),
+                        write_version: row.get(7),
+                    })
+                    .collect();
+                Ok(results)
+            }
+        }
+    }
+
+    pub async fn get_accounts_by_spl_token_mint(
+        &mut self,
+        owner: &Pubkey,
+    ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let statement = &client.get_accounts_by_token_mint_stmt;
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;

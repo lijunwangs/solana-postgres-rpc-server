@@ -298,6 +298,59 @@ impl JsonRpcRequestProcessor {
         Ok(keyed_accounts)
     }
 
+    /// Get an iterator of spl-token accounts by mint address
+    async fn get_filtered_spl_token_accounts_by_mint(
+        &self,
+        client: &mut SimplePostgresClient,
+        config: Option<RpcAccountInfoConfig>,
+        program_id: &Pubkey,
+        mint_key: &Pubkey,
+        mut filters: Vec<RpcFilterType>,
+    ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
+        // The by-mint accounts index checks for Token Account state and Mint address on inclusion.
+        // However, due to the current AccountsDb implementation, an account may remain in storage
+        // as be zero-lamport AccountSharedData::Default() after being wiped and reinitialized in later
+        // updates. We include the redundant filters here to avoid returning these accounts.
+        //
+        // Filter on Token Account state
+        filters.push(RpcFilterType::DataSize(
+            TokenAccount::get_packed_len() as u64
+        ));
+        // Filter on Mint address
+        filters.push(RpcFilterType::Memcmp(Memcmp {
+            offset: SPL_TOKEN_ACCOUNT_MINT_OFFSET,
+            bytes: MemcmpEncodedBytes::Bytes(mint_key.to_bytes().into()),
+            encoding: None,
+        }));
+
+        let accounts = client.get_accounts_by_spl_token_owner(&mint_key).await?;
+
+        let mut keyed_accounts = Vec::new();
+
+        let config = config.unwrap_or_default();
+        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+        let data_slice_config = config.data_slice;
+        check_slice_and_encoding(&encoding, data_slice_config.is_some())
+            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
+        optimize_filters(&mut filters);
+
+        for account in accounts {
+            if account.owner() == program_id
+                && filters.iter().all(|filter_type| match filter_type {
+                    RpcFilterType::DataSize(size) => account.data().len() as u64 == *size,
+                    RpcFilterType::Memcmp(compare) => compare.bytes_match(account.data()),
+                })
+            {
+                keyed_accounts.push(RpcKeyedAccount {
+                    pubkey: account.pubkey.to_string(),
+                    account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
+                        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
+                });
+            }
+        }
+        Ok(keyed_accounts)
+    }
+
     async fn get_filtered_program_accounts(
         &self,
         client: &mut SimplePostgresClient,
@@ -352,11 +405,16 @@ impl JsonRpcRequestProcessor {
                     filters,
                 )
                 .await?
-            }
-            // else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
-            //     self.get_filtered_spl_token_accounts_by_mint(result, program_id, &mint, filters)?
-            // }
-            else {
+            } else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
+                self.get_filtered_spl_token_accounts_by_mint(
+                    &mut client,
+                    config,
+                    program_id,
+                    &mint,
+                    filters,
+                )
+                .await?
+            } else {
                 self.get_filtered_program_accounts(&mut client, program_id, config, filters)
                     .await?
             }
