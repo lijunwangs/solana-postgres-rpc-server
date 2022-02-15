@@ -250,7 +250,6 @@ impl JsonRpcRequestProcessor {
         &self,
         client: &mut SimplePostgresClient,
         config: Option<RpcAccountInfoConfig>,
-        accounts: Vec<RpcKeyedAccount>,
         program_id: &Pubkey,
         owner_key: &Pubkey,
         mut filters: Vec<RpcFilterType>,
@@ -299,7 +298,7 @@ impl JsonRpcRequestProcessor {
         Ok(keyed_accounts)
     }
 
-    async fn get_accounts_by_owner(
+    async fn get_filtered_program_accounts(
         &self,
         client: &mut SimplePostgresClient,
         program_id: &Pubkey,
@@ -342,42 +341,27 @@ impl JsonRpcRequestProcessor {
     ) -> Result<OptionalContext<Vec<RpcKeyedAccount>>> {
         info!("get_program_accounts is called... {}", program_id);
         let mut client = self.db_client.lock().await;
-        let result = client.get_accounts_by_owner(program_id).await;
-        match result {
-            Ok(accounts) => {
-                let config = config.unwrap_or_default();
-                let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
-                let data_slice_config = config.data_slice;
-                check_slice_and_encoding(&encoding, data_slice_config.is_some())?;
-                optimize_filters(&mut filters);
-                let result = accounts
-                    .into_iter()
-                    .map(|account| {
-                        Ok(RpcKeyedAccount {
-                            pubkey: account.pubkey.to_string(),
-                            account: encode_account(
-                                &account,
-                                &account.pubkey,
-                                encoding,
-                                data_slice_config,
-                            )?,
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
 
-                // let accounts = {
-                //     if let Some(owner) = get_spl_token_owner_filter(program_id, &filters) {
-                //         self.get_filtered_spl_token_accounts_by_owner(result, program_id, &owner, filters)?
-                //     } else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
-                //         self.get_filtered_spl_token_accounts_by_mint(result, program_id, &mint, filters)?
-                //     } else {
-                //         self.get_filtered_program_accounts(result, program_id, filters)?
-                //     }
-                // }
-
-                Ok(result).map(OptionalContext::NoContext)
+        let result = {
+            if let Some(owner) = get_spl_token_owner_filter(program_id, &filters) {
+                self.get_filtered_spl_token_accounts_by_owner(
+                    &mut client,
+                    config,
+                    program_id,
+                    &owner,
+                    filters,
+                )
+                .await?
             }
-            Err(err) => Err(Error::internal_error()),
-        }
+            // else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
+            //     self.get_filtered_spl_token_accounts_by_mint(result, program_id, &mint, filters)?
+            // }
+            else {
+                self.get_filtered_program_accounts(&mut client, program_id, config, filters)
+                    .await?
+            }
+        };
+
+        Ok(result).map(OptionalContext::NoContext)
     }
 }
