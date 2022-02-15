@@ -196,7 +196,36 @@ fn get_spl_token_mint_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> 
     }
 }
 
-#[allow(unused_variables)]
+fn filter_accounts(
+    config: Option<RpcAccountInfoConfig>,
+    mut filters: Vec<RpcFilterType>,
+    accounts: Vec<crate::postgres_client::DbAccountInfo>,
+    program_id: &Pubkey,
+) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
+    let mut keyed_accounts = Vec::new();
+    let config = config.unwrap_or_default();
+    let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+    let data_slice_config = config.data_slice;
+    check_slice_and_encoding(&encoding, data_slice_config.is_some())
+        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
+    optimize_filters(&mut filters);
+    for account in accounts {
+        if account.owner() == program_id
+            && filters.iter().all(|filter_type| match filter_type {
+                RpcFilterType::DataSize(size) => account.data().len() as u64 == *size,
+                RpcFilterType::Memcmp(compare) => compare.bytes_match(account.data()),
+            })
+        {
+            keyed_accounts.push(RpcKeyedAccount {
+                pubkey: account.pubkey.to_string(),
+                account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
+                    .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
+            });
+        }
+    }
+    Ok(keyed_accounts)
+}
+
 impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         Self {
@@ -254,12 +283,6 @@ impl JsonRpcRequestProcessor {
         owner_key: &Pubkey,
         mut filters: Vec<RpcFilterType>,
     ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
-        // The by-owner accounts index checks for Token Account state and Owner address on
-        // inclusion. However, due to the current AccountsDb implementation, an account may remain
-        // in storage as a zero-lamport AccountSharedData::Default() after being wiped and reinitialized in
-        // later updates. We include the redundant filters here to avoid returning these accounts.
-        //
-        // Filter on Token Account state
         filters.push(RpcFilterType::DataSize(
             TokenAccount::get_packed_len() as u64
         ));
@@ -272,30 +295,7 @@ impl JsonRpcRequestProcessor {
 
         let accounts = client.get_accounts_by_spl_token_owner(&owner_key).await?;
 
-        let mut keyed_accounts = Vec::new();
-
-        let config = config.unwrap_or_default();
-        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
-        let data_slice_config = config.data_slice;
-        check_slice_and_encoding(&encoding, data_slice_config.is_some())
-            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
-        optimize_filters(&mut filters);
-
-        for account in accounts {
-            if account.owner() == program_id
-                && filters.iter().all(|filter_type| match filter_type {
-                    RpcFilterType::DataSize(size) => account.data().len() as u64 == *size,
-                    RpcFilterType::Memcmp(compare) => compare.bytes_match(account.data()),
-                })
-            {
-                keyed_accounts.push(RpcKeyedAccount {
-                    pubkey: account.pubkey.to_string(),
-                    account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
-                        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
-                });
-            }
-        }
-        Ok(keyed_accounts)
+        filter_accounts(config, filters, accounts, program_id)
     }
 
     /// Get an iterator of spl-token accounts by mint address
@@ -307,12 +307,6 @@ impl JsonRpcRequestProcessor {
         mint_key: &Pubkey,
         mut filters: Vec<RpcFilterType>,
     ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
-        // The by-mint accounts index checks for Token Account state and Mint address on inclusion.
-        // However, due to the current AccountsDb implementation, an account may remain in storage
-        // as be zero-lamport AccountSharedData::Default() after being wiped and reinitialized in later
-        // updates. We include the redundant filters here to avoid returning these accounts.
-        //
-        // Filter on Token Account state
         filters.push(RpcFilterType::DataSize(
             TokenAccount::get_packed_len() as u64
         ));
@@ -324,31 +318,7 @@ impl JsonRpcRequestProcessor {
         }));
 
         let accounts = client.get_accounts_by_spl_token_owner(&mint_key).await?;
-
-        let mut keyed_accounts = Vec::new();
-
-        let config = config.unwrap_or_default();
-        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
-        let data_slice_config = config.data_slice;
-        check_slice_and_encoding(&encoding, data_slice_config.is_some())
-            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
-        optimize_filters(&mut filters);
-
-        for account in accounts {
-            if account.owner() == program_id
-                && filters.iter().all(|filter_type| match filter_type {
-                    RpcFilterType::DataSize(size) => account.data().len() as u64 == *size,
-                    RpcFilterType::Memcmp(compare) => compare.bytes_match(account.data()),
-                })
-            {
-                keyed_accounts.push(RpcKeyedAccount {
-                    pubkey: account.pubkey.to_string(),
-                    account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
-                        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
-                });
-            }
-        }
-        Ok(keyed_accounts)
+        filter_accounts(config, filters, accounts, program_id)
     }
 
     async fn get_filtered_program_accounts(
