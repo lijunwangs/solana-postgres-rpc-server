@@ -241,31 +241,7 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        match result {
-            Err(error) => {
-                let msg = format!(
-                    "Failed load the account from the database. Account: {}, Error: ({:?})",
-                    owner, error
-                );
-                Err(PostgresRpcServerError::DatabaseQueryError { msg })
-            }
-            Ok(result) => {
-                let results = result
-                    .into_iter()
-                    .map(|row| DbAccountInfo {
-                        pubkey: Pubkey::new(row.get(0)),
-                        lamports: row.get(3),
-                        owner: row.get(2),
-                        executable: row.get(4),
-                        rent_epoch: row.get(5),
-                        data: row.get(6),
-                        slot: row.get(1),
-                        write_version: row.get(7),
-                    })
-                    .collect();
-                Ok(results)
-            }
-        }
+        load_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_owner(
@@ -277,31 +253,7 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        match result {
-            Err(error) => {
-                let msg = format!(
-                    "Failed load the account from the database. Account: {}, Error: ({:?})",
-                    owner, error
-                );
-                Err(PostgresRpcServerError::DatabaseQueryError { msg })
-            }
-            Ok(result) => {
-                let results = result
-                    .into_iter()
-                    .map(|row| DbAccountInfo {
-                        pubkey: Pubkey::new(row.get(0)),
-                        lamports: row.get(3),
-                        owner: row.get(2),
-                        executable: row.get(4),
-                        rent_epoch: row.get(5),
-                        data: row.get(6),
-                        slot: row.get(1),
-                        write_version: row.get(7),
-                    })
-                    .collect();
-                Ok(results)
-            }
-        }
+        load_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_mint(
@@ -313,30 +265,34 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        match result {
-            Err(error) => {
-                let msg = format!(
-                    "Failed load the account from the database. Account: {}, Error: ({:?})",
-                    owner, error
-                );
-                Err(PostgresRpcServerError::DatabaseQueryError { msg })
-            }
-            Ok(result) => {
-                let results = result
-                    .into_iter()
-                    .map(|row| DbAccountInfo {
-                        pubkey: Pubkey::new(row.get(0)),
-                        lamports: row.get(3),
-                        owner: row.get(2),
-                        executable: row.get(4),
-                        rent_epoch: row.get(5),
-                        data: row.get(6),
-                        slot: row.get(1),
-                        write_version: row.get(7),
-                    })
-                    .collect();
-                Ok(results)
-            }
+        load_results(result, owner)
+    }
+}
+
+fn load_results(result: Result<Vec<postgres::Row>, postgres::Error>, owner: &Pubkey) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+    match result {
+        Err(error) => {
+            let msg = format!(
+                "Failed load the account from the database. Account: {}, Error: ({:?})",
+                owner, error
+            );
+            Err(PostgresRpcServerError::DatabaseQueryError { msg })
+        }
+        Ok(result) => {
+            let results = result
+                .into_iter()
+                .map(|row| DbAccountInfo {
+                    pubkey: Pubkey::new(row.get(0)),
+                    lamports: row.get(3),
+                    owner: row.get(2),
+                    executable: row.get(4),
+                    rent_epoch: row.get(5),
+                    data: row.get(6),
+                    slot: row.get(1),
+                    write_version: row.get(7),
+                })
+                .collect();
+            Ok(results)
         }
     }
 }
