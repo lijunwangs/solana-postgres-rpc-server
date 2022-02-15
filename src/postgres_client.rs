@@ -129,21 +129,7 @@ impl SimplePostgresClient {
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE owner = $1";
-        info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
 
     async fn build_get_accounts_by_spl_token_owner_stmt(
@@ -153,21 +139,7 @@ impl SimplePostgresClient {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.inner_key\
             WHERE owner_idx.owner_key = $1";
-        info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by token owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
 
     async fn build_get_accounts_by_spl_token_mint_stmt(
@@ -177,22 +149,9 @@ impl SimplePostgresClient {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.inner_key\
             WHERE owner_idx.mint_key = $1";
-        info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by token mint for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
+
     pub async fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
         info!("Creating SimplePostgresClient...");
         let (mut client, connection) = Self::connect_to_db(config).await?;
@@ -379,5 +338,22 @@ impl SimplePostgresClient {
                 Ok(results)
             }
         }
+    }
+}
+
+async fn prepare_statement(stmt: &str, client: &mut Client, config: &PostgresRpcServerConfig) -> Result<Statement, PostgresRpcServerError> {
+    info!("Preparing statement {}", stmt);
+    let stmt = client.prepare(stmt).await;
+    info!("Prepared statement, ok? {}", stmt.is_ok());
+    match stmt {
+        Err(err) => {
+            return Err(PostgresRpcServerError::DataSchemaError {
+                msg: format!(
+                    "Error in preparing for the accounts select by token owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                    err, config.host, config.user, config
+                ),
+            });
+        }
+        Ok(stmt) => Ok(stmt),
     }
 }

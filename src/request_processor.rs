@@ -261,7 +261,7 @@ impl JsonRpcRequestProcessor {
                     )),
                 })
             }
-            Err(err) => Err(Error::internal_error()),
+            Err(_err) => Err(Error::internal_error()),
         }
     }
 
@@ -326,32 +326,10 @@ impl JsonRpcRequestProcessor {
         client: &mut SimplePostgresClient,
         program_id: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
-        mut filters: Vec<RpcFilterType>,
+        filters: Vec<RpcFilterType>,
     ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
         let accounts = client.get_accounts_by_owner(program_id).await?;
-
-        let config = config.unwrap_or_default();
-        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
-        let data_slice_config = config.data_slice;
-        check_slice_and_encoding(&encoding, data_slice_config.is_some())
-            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
-        optimize_filters(&mut filters);
-        let result = accounts
-            .into_iter()
-            .map(|account| {
-                Ok(RpcKeyedAccount {
-                    pubkey: account.pubkey.to_string(),
-                    account: encode_account(
-                        &account,
-                        &account.pubkey,
-                        encoding,
-                        data_slice_config,
-                    )?,
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map_err(|error| rpc_custom_error_from_json_rpc_error(error))?;
-        Ok(result)
+        filter_accounts(config, filters, accounts, program_id)
     }
 
     #[allow(unused_mut)]
