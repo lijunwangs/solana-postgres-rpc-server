@@ -1,6 +1,7 @@
 use {
     crate::{
-        postgres_client::SimplePostgresClient, rpc::OptionalContext, rpc_service::JsonRpcConfig,
+        postgres_client::SimplePostgresClient, postgres_rpc_server_error::PostgresRpcServerError,
+        rpc::OptionalContext, rpc_service::JsonRpcConfig,
     },
     jsonrpc_core::{futures::lock::Mutex, types::error, types::Error, Metadata, Result},
     log::*,
@@ -35,6 +36,18 @@ pub struct JsonRpcRequestProcessor {
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
+
+impl From<PostgresRpcServerError> for RpcCustomError {
+    fn from(error: PostgresRpcServerError) -> Self {
+        let message = format!("Failed to load data from the database. Error: ({})", error);
+        RpcCustomError::ScanError { message }
+    }
+}
+
+fn rpc_custom_error_from_json_rpc_error(error: jsonrpc_core::Error) -> RpcCustomError {
+    let message = format!("Failed to convert the JSON rpc object. Error: ({})", error);
+    RpcCustomError::ScanError { message }
+}
 
 fn check_slice_and_encoding(encoding: &UiAccountEncoding, data_slice_is_some: bool) -> Result<()> {
     match encoding {
@@ -235,7 +248,8 @@ impl JsonRpcRequestProcessor {
     /// Get an iterator of spl-token accounts by owner address
     async fn get_filtered_spl_token_accounts_by_owner(
         &self,
-        mut client: &SimplePostgresClient,
+        client: &mut SimplePostgresClient,
+        config: Option<RpcAccountInfoConfig>,
         accounts: Vec<RpcKeyedAccount>,
         program_id: &Pubkey,
         owner_key: &Pubkey,
@@ -257,23 +271,65 @@ impl JsonRpcRequestProcessor {
             encoding: None,
         }));
 
-        Ok(client.get_accounts_by_spl_token_owner(
-                &owner_key).await.?.iter().map(
-                |account| {
-                    account.owner() == program_id
-                        && filters.iter().all(|filter_type| match filter_type {
-                            RpcFilterType::DataSize(size) => {
-                                account.data().len() as u64 == *size
-                            }
-                            RpcFilterType::Memcmp(compare) => {
-                                compare.bytes_match(account.data())
-                            }
-                        })
-                },
-            )
-            .map_err(|e| RpcCustomError::ScanError {
-                message: e.to_string(),
-            })?)
+        let accounts = client.get_accounts_by_spl_token_owner(&owner_key).await?;
+
+        let mut keyed_accounts = Vec::new();
+
+        let config = config.unwrap_or_default();
+        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+        let data_slice_config = config.data_slice;
+        check_slice_and_encoding(&encoding, data_slice_config.is_some())
+            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
+        optimize_filters(&mut filters);
+
+        for account in accounts {
+            if account.owner() == program_id
+                && filters.iter().all(|filter_type| match filter_type {
+                    RpcFilterType::DataSize(size) => account.data().len() as u64 == *size,
+                    RpcFilterType::Memcmp(compare) => compare.bytes_match(account.data()),
+                })
+            {
+                keyed_accounts.push(RpcKeyedAccount {
+                    pubkey: account.pubkey.to_string(),
+                    account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
+                        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
+                });
+            }
+        }
+        Ok(keyed_accounts)
+    }
+
+    async fn get_accounts_by_owner(
+        &self,
+        client: &mut SimplePostgresClient,
+        program_id: &Pubkey,
+        config: Option<RpcAccountInfoConfig>,
+        mut filters: Vec<RpcFilterType>,
+    ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
+        let accounts = client.get_accounts_by_owner(program_id).await?;
+
+        let config = config.unwrap_or_default();
+        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+        let data_slice_config = config.data_slice;
+        check_slice_and_encoding(&encoding, data_slice_config.is_some())
+            .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
+        optimize_filters(&mut filters);
+        let result = accounts
+            .into_iter()
+            .map(|account| {
+                Ok(RpcKeyedAccount {
+                    pubkey: account.pubkey.to_string(),
+                    account: encode_account(
+                        &account,
+                        &account.pubkey,
+                        encoding,
+                        data_slice_config,
+                    )?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()
+            .map_err(|error| rpc_custom_error_from_json_rpc_error(error))?;
+        Ok(result)
     }
 
     #[allow(unused_mut)]

@@ -54,6 +54,7 @@ struct PostgresSqlClientWrapper {
     client: Client,
     get_account_stmt: Statement,
     get_accounts_by_owner_stmt: Statement,
+    get_accounts_by_token_owner_stmt: Statement,
 }
 
 pub struct SimplePostgresClient {
@@ -159,7 +160,7 @@ impl SimplePostgresClient {
             Err(err) => {
                 return Err(PostgresRpcServerError::DataSchemaError {
                     msg: format!(
-                        "Error in preparing for the accounts select by owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                        "Error in preparing for the accounts select by token owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
                         err, config.host, config.user, config
                     ),
                 });
@@ -184,12 +185,16 @@ impl SimplePostgresClient {
         let get_accounts_by_owner_stmt =
             Self::build_get_accounts_by_owner_stmt(&mut client, config).await?;
 
+        let get_accounts_by_token_owner_stmt =
+            Self::build_get_accounts_by_spl_token_owner_stmt(&mut client, config).await?;
+
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
                 client,
                 get_account_stmt,
                 get_accounts_by_owner_stmt,
+                get_accounts_by_token_owner_stmt,
             }),
         })
     }
@@ -281,7 +286,7 @@ impl SimplePostgresClient {
         owner: &Pubkey,
     ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
-        let statement = &client.get_accounts_by_owner_stmt;
+        let statement = &client.get_accounts_by_token_owner_stmt;
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
