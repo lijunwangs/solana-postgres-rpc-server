@@ -207,7 +207,7 @@ fn filter_accounts(
     let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
     let data_slice_config = config.data_slice;
     check_slice_and_encoding(&encoding, data_slice_config.is_some())
-        .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?;
+        .map_err(rpc_custom_error_from_json_rpc_error)?;
     optimize_filters(&mut filters);
     for account in accounts {
         if account.owner() == program_id
@@ -219,7 +219,7 @@ fn filter_accounts(
             keyed_accounts.push(RpcKeyedAccount {
                 pubkey: account.pubkey.to_string(),
                 account: encode_account(&account, &account.pubkey, encoding, data_slice_config)
-                    .map_err(|err| rpc_custom_error_from_json_rpc_error(err))?,
+                    .map_err(rpc_custom_error_from_json_rpc_error)?,
             });
         }
     }
@@ -240,38 +240,46 @@ impl JsonRpcRequestProcessor {
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
         info!("getting account_info is called... {}", pubkey);
-        let mut client = self.db_client.lock().await;
-        let result = client.get_account(pubkey).await;
-        match result {
-            Ok(account) => {
-                let config = config.unwrap_or_default();
-                let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
-                let data_slice_config = config.data_slice;
+        let config = config.unwrap_or_default();
+        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+        check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
-                Ok(RpcResponse {
-                    context: RpcResponseContext {
-                        slot: account.slot as u64,
-                    },
-                    value: Some(UiAccount::encode(
-                        &account.pubkey,
-                        &account,
-                        encoding,
-                        None,
-                        data_slice_config,
-                    )),
-                })
-            }
-            Err(_err) => Err(Error::internal_error()),
-        }
+        let data_slice_config = config.data_slice;
+        let mut client = self.db_client.lock().await;
+
+        let account = get_encoded_account(&mut client, pubkey, encoding, data_slice_config).await?;
+
+        Ok(RpcResponse {
+            context: RpcResponseContext { slot: 0 },
+            value: account,
+        })
     }
 
     #[allow(unused_mut)]
-    pub fn get_multiple_accounts(
+    pub async fn get_multiple_accounts(
         &self,
         pubkeys: Vec<Pubkey>,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Vec<Option<UiAccount>>>> {
-        Err(Error::internal_error())
+        info!("getting account_info is called for {:?}", pubkeys);
+        let config = config.unwrap_or_default();
+        let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
+        check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
+
+        let mut client = self.db_client.lock().await;
+
+        let mut accounts = Vec::new();
+
+        for pubkey in pubkeys {
+            let account =
+                get_encoded_account(&mut client, &pubkey, encoding, config.data_slice).await?;
+            accounts.push(account);
+        }
+
+        Ok(RpcResponse {
+            context: RpcResponseContext { slot: 0 },
+            value: accounts,
+        })
     }
 
     /// Get an iterator of spl-token accounts by owner address
@@ -293,7 +301,7 @@ impl JsonRpcRequestProcessor {
             encoding: None,
         }));
 
-        let accounts = client.get_accounts_by_spl_token_owner(&owner_key).await?;
+        let accounts = client.get_accounts_by_spl_token_owner(owner_key).await?;
 
         filter_accounts(config, filters, accounts, program_id)
     }
@@ -317,7 +325,7 @@ impl JsonRpcRequestProcessor {
             encoding: None,
         }));
 
-        let accounts = client.get_accounts_by_spl_token_owner(&mint_key).await?;
+        let accounts = client.get_accounts_by_spl_token_owner(mint_key).await?;
         filter_accounts(config, filters, accounts, program_id)
     }
 
@@ -369,5 +377,24 @@ impl JsonRpcRequestProcessor {
         };
 
         Ok(result).map(OptionalContext::NoContext)
+    }
+}
+
+async fn get_encoded_account(
+    client: &mut SimplePostgresClient,
+    pubkey: &Pubkey,
+    encoding: UiAccountEncoding,
+    data_slice_config: Option<UiDataSliceConfig>,
+) -> Result<Option<UiAccount>> {
+    let result = client.get_account(pubkey).await;
+    match result {
+        Ok(account) => Ok(Some(UiAccount::encode(
+            &account.pubkey,
+            &account,
+            encoding,
+            None,
+            data_slice_config,
+        ))),
+        Err(_err) => Err(Error::internal_error()),
     }
 }

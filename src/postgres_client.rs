@@ -269,7 +269,10 @@ impl SimplePostgresClient {
     }
 }
 
-fn load_results(result: Result<Vec<postgres::Row>, postgres::Error>, owner: &Pubkey) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+fn load_results(
+    result: Result<Vec<postgres::Row>, postgres::Error>,
+    owner: &Pubkey,
+) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
     match result {
         Err(error) => {
             let msg = format!(
@@ -297,7 +300,11 @@ fn load_results(result: Result<Vec<postgres::Row>, postgres::Error>, owner: &Pub
     }
 }
 
-async fn prepare_statement(stmt: &str, client: &mut Client, config: &PostgresRpcServerConfig) -> Result<Statement, PostgresRpcServerError> {
+async fn prepare_statement(
+    stmt: &str,
+    client: &mut Client,
+    config: &PostgresRpcServerConfig,
+) -> Result<Statement, PostgresRpcServerError> {
     info!("Preparing statement {}", stmt);
     let stmt = client.prepare(stmt).await;
     info!("Prepared statement, ok? {}", stmt.is_ok());
