@@ -1,3 +1,5 @@
+use crate::postgres_client::DbAccountInfo;
+
 use {
     crate::{
         postgres_client::SimplePostgresClient, postgres_rpc_server_error::PostgresRpcServerError,
@@ -6,8 +8,12 @@ use {
     jsonrpc_core::{futures::lock::Mutex, types::error, types::Error, Metadata, Result},
     log::*,
     solana_account_decoder::{
-        parse_token::is_known_spl_token_id, UiAccount, UiAccountEncoding, UiDataSliceConfig,
-        MAX_BASE58_BYTES,
+        parse_account_data::AccountAdditionalData,
+        parse_token::{
+            get_token_account_mint, is_known_spl_token_id, spl_token_native_mint,
+            spl_token_native_mint_program_id,
+        },
+        UiAccount, UiAccountEncoding, UiDataSliceConfig, MAX_BASE58_BYTES,
     },
     solana_client::{
         rpc_config::RpcAccountInfoConfig,
@@ -23,7 +29,7 @@ use {
         program_pack::Pack,
         pubkey::{Pubkey, PUBKEY_BYTES},
     },
-    spl_token::state::Account as TokenAccount,
+    spl_token::state::{Account as TokenAccount, Mint},
     std::sync::Arc,
 };
 
@@ -226,6 +232,101 @@ fn filter_accounts(
     Ok(keyed_accounts)
 }
 
+fn get_mint_decimals(data: &[u8]) -> Result<u8> {
+    Mint::unpack(data)
+        .map_err(|_| {
+            Error::invalid_params("Invalid param: Token mint could not be unpacked".to_string())
+        })
+        .map(|mint| mint.decimals)
+}
+
+/// Analyze a mint Pubkey that may be the native_mint and get the mint-account owner (token
+/// program_id) and decimals
+pub async fn get_mint_owner_and_decimals(
+    client: &mut SimplePostgresClient,
+    mint: &Pubkey,
+) -> Result<(Pubkey, u8)> {
+    if mint == &spl_token_native_mint() {
+        Ok((
+            spl_token_native_mint_program_id(),
+            spl_token::native_mint::DECIMALS,
+        ))
+    } else {
+        let result = client.get_account(mint).await;
+        match result {
+            Ok(mint_account) => {
+                let decimals = get_mint_decimals(mint_account.data())?;
+                Ok((*mint_account.owner(), decimals))
+            }
+            Err(err) => {
+                error!("Received error while getting account {}", err);
+                Err(Error::from(err))
+            }
+        }
+    }
+}
+
+pub async fn get_parsed_token_account(
+    client: &mut SimplePostgresClient,
+    pubkey: &Pubkey,
+    account: DbAccountInfo,
+) -> Result<UiAccount> {
+    if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
+        let (_, decimals) = get_mint_owner_and_decimals(client, &mint_pubkey).await?;
+        let additional_data = Some(AccountAdditionalData {
+            spl_token_decimals: Some(decimals),
+        });
+
+        return Ok(UiAccount::encode(
+            pubkey,
+            &account,
+            UiAccountEncoding::JsonParsed,
+            additional_data,
+            None,
+        ));
+    }
+
+    Err(Error::invalid_params("Could not find the mint".to_string()))
+}
+
+async fn get_encoded_account(
+    client: &mut SimplePostgresClient,
+    pubkey: &Pubkey,
+    encoding: UiAccountEncoding,
+    data_slice_config: Option<UiDataSliceConfig>,
+) -> Result<Option<UiAccount>> {
+    let result = client.get_account(pubkey).await;
+    match result {
+        Ok(account) => {
+            if is_known_spl_token_id(account.owner()) && encoding == UiAccountEncoding::JsonParsed {
+                let account = get_parsed_token_account(client, pubkey, account).await;
+                account.and_then(|account| Ok(Some(account)))
+            } else {
+                Ok(Some(UiAccount::encode(
+                    &account.pubkey,
+                    &account,
+                    encoding,
+                    None,
+                    data_slice_config,
+                )))
+            }
+        }
+        Err(_err) => Err(Error::internal_error()),
+    }
+}
+
+impl From<PostgresRpcServerError> for Error {
+    fn from(error: PostgresRpcServerError) -> Self {
+        match error {
+            PostgresRpcServerError::ObjectNotFound { msg } => {
+                info!("Object is not found: {}", msg);
+                Error::invalid_params("Object is not found")
+            }
+            _ => Error::internal_error(),
+        }
+    }
+}
+
 impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         Self {
@@ -255,7 +356,6 @@ impl JsonRpcRequestProcessor {
         })
     }
 
-    #[allow(unused_mut)]
     pub async fn get_multiple_accounts(
         &self,
         pubkeys: Vec<Pubkey>,
@@ -377,24 +477,5 @@ impl JsonRpcRequestProcessor {
         };
 
         Ok(result).map(OptionalContext::NoContext)
-    }
-}
-
-async fn get_encoded_account(
-    client: &mut SimplePostgresClient,
-    pubkey: &Pubkey,
-    encoding: UiAccountEncoding,
-    data_slice_config: Option<UiDataSliceConfig>,
-) -> Result<Option<UiAccount>> {
-    let result = client.get_account(pubkey).await;
-    match result {
-        Ok(account) => Ok(Some(UiAccount::encode(
-            &account.pubkey,
-            &account,
-            encoding,
-            None,
-            data_slice_config,
-        ))),
-        Err(_err) => Err(Error::internal_error()),
     }
 }
