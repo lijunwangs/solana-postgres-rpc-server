@@ -298,10 +298,13 @@ async fn get_encoded_account(
     let result = client.get_account(pubkey).await;
     match result {
         Ok(account) => {
+            if account.lamports() == 0 {
+                return Ok(None)
+            }
             if is_known_spl_token_id(account.owner()) && encoding == UiAccountEncoding::JsonParsed {
                 let account = get_parsed_token_account(client, pubkey, account).await;
                 account.and_then(|account| Ok(Some(account)))
-            } else {
+            } else {                
                 Ok(Some(UiAccount::encode(
                     &account.pubkey,
                     &account,
