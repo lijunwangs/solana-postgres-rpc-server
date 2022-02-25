@@ -4,7 +4,7 @@ use {
         postgres_rpc_server_error::PostgresRpcServerError,
     },
     log::*,
-    solana_sdk::{account::ReadableAccount, clock::Epoch, pubkey::Pubkey},
+    solana_sdk::{account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey},
     std::sync::Mutex,
     tokio_postgres::{
         tls::{NoTls, NoTlsStream},
@@ -100,12 +100,42 @@ impl SimplePostgresClient {
         }
     }
 
+    /// This get the latest account from account table.
     async fn build_get_account_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE pubkey = $1";
+        info!("Preparing statement {}", stmt);
+        let stmt = client.prepare(stmt).await;
+        info!("Prepared statement, ok? {}", stmt.is_ok());
+
+        match stmt {
+            Err(err) => {
+                return Err(PostgresRpcServerError::DataSchemaError {
+                    msg: format!(
+                        "Error in preparing for the accounts select by key for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                        err, config.host, config.user, config
+                    ),
+                });
+            }
+            Ok(stmt) => Ok(stmt),
+        }
+    }
+
+
+    /// This get the latest account from account table at certain commitment level.
+    async fn build_get_latest_account_at_commitment_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+
+
+        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct
+            JOIN slot as s ON acct.slot = s.slot \
+            WHERE acct.pubkey = $1
+            AND s.status = $2";
         info!("Preparing statement {}", stmt);
         let stmt = client.prepare(stmt).await;
         info!("Prepared statement, ok? {}", stmt.is_ok());
