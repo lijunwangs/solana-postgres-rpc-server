@@ -26,6 +26,7 @@ use {
     },
     solana_sdk::{
         account::ReadableAccount,
+        commitment_config::CommitmentConfig,
         program_pack::Pack,
         pubkey::{Pubkey, PUBKEY_BYTES},
     },
@@ -294,8 +295,16 @@ async fn get_encoded_account(
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
+    commitment: Option<CommitmentConfig>,
 ) -> Result<Option<UiAccount>> {
-    let result = client.get_account(pubkey).await;
+    let result = if let Some(commitment) = commitment {
+        client
+            .get_account_with_commitment(pubkey, commitment.commitment)
+            .await
+    } else {
+        client.get_account(pubkey).await
+    };
+
     match result {
         Ok(account) => {
             if account.lamports() == 0 {
@@ -350,8 +359,10 @@ impl JsonRpcRequestProcessor {
 
         let data_slice_config = config.data_slice;
         let mut client = self.db_client.lock().await;
-
-        let account = get_encoded_account(&mut client, pubkey, encoding, data_slice_config).await?;
+        let commitment = config.commitment;
+        let account =
+            get_encoded_account(&mut client, pubkey, encoding, data_slice_config, commitment)
+                .await?;
 
         Ok(RpcResponse {
             context: RpcResponseContext { slot: 0 },
@@ -373,9 +384,16 @@ impl JsonRpcRequestProcessor {
 
         let mut accounts = Vec::new();
 
+        let commitment = config.commitment;
         for pubkey in pubkeys {
-            let account =
-                get_encoded_account(&mut client, &pubkey, encoding, config.data_slice).await?;
+            let account = get_encoded_account(
+                &mut client,
+                &pubkey,
+                encoding,
+                config.data_slice,
+                commitment,
+            )
+            .await?;
             accounts.push(account);
         }
 

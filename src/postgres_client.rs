@@ -55,6 +55,7 @@ impl ReadableAccount for DbAccountInfo {
 struct PostgresSqlClientWrapper {
     client: Client,
     get_account_stmt: Statement,
+    get_account_with_commitment_stmt: Statement,
     get_accounts_by_owner_stmt: Statement,
     get_accounts_by_token_owner_stmt: Statement,
     get_accounts_by_token_mint_stmt: Statement,
@@ -62,6 +63,15 @@ struct PostgresSqlClientWrapper {
 
 pub struct SimplePostgresClient {
     client: Mutex<PostgresSqlClientWrapper>,
+}
+
+fn get_commitment_level_str(commitment: CommitmentLevel) -> &'static str {
+    match commitment {
+        CommitmentLevel::Confirmed => "confirmed",
+        CommitmentLevel::Finalized => "finalized",
+        CommitmentLevel::Processed => "processed",
+        _ => "unsupported",
+    }
 }
 
 impl SimplePostgresClient {
@@ -127,14 +137,11 @@ impl SimplePostgresClient {
     }
 
     /// This get the latest account from account table at certain commitment level.
-    async fn build_get_latest_account_at_commitment_stmt(
+    async fn build_get_account_with_commitment_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
-        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct
-            JOIN slot as s ON acct.slot = s.slot \
-            WHERE acct.pubkey = $1
-            AND s.status = $2";
+        let stmt = "SELECT get_account_with_commitment_level($1, $2)";
         info!("Preparing statement {}", stmt);
         let stmt = client.prepare(stmt).await;
         info!("Prepared statement, ok? {}", stmt.is_ok());
@@ -194,6 +201,9 @@ impl SimplePostgresClient {
         });
 
         let get_account_stmt = Self::build_get_account_stmt(&mut client, config).await?;
+        let get_account_with_commitment_stmt =
+            Self::build_get_account_with_commitment_stmt(&mut client, config).await?;
+
         let get_accounts_by_owner_stmt =
             Self::build_get_accounts_by_owner_stmt(&mut client, config).await?;
 
@@ -208,6 +218,7 @@ impl SimplePostgresClient {
             client: Mutex::new(PostgresSqlClientWrapper {
                 client,
                 get_account_stmt,
+                get_account_with_commitment_stmt,
                 get_accounts_by_owner_stmt,
                 get_accounts_by_token_owner_stmt,
                 get_accounts_by_token_mint_stmt,
@@ -224,6 +235,57 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
+        match result {
+            Err(error) => {
+                let msg = format!(
+                    "Failed load the account from the database. Account: {}, Error: ({:?})",
+                    pubkey, error
+                );
+                Err(PostgresRpcServerError::DatabaseQueryError { msg })
+            }
+            Ok(result) => match result.len() {
+                0 => {
+                    let msg = format!(
+                        "The account with key {} is not found from the database.",
+                        pubkey
+                    );
+                    Err(PostgresRpcServerError::ObjectNotFound { msg })
+                }
+                1 => Ok(DbAccountInfo {
+                    pubkey: Pubkey::new(result[0].get(0)),
+                    lamports: result[0].get(3),
+                    owner: result[0].get(2),
+                    executable: result[0].get(4),
+                    rent_epoch: result[0].get(5),
+                    data: result[0].get(6),
+                    slot: result[0].get(1),
+                    write_version: result[0].get(7),
+                }),
+                cnt => {
+                    let msg = format!(
+                        "Found more than 1 accounts with the key {} count: {} from the database.",
+                        pubkey, cnt
+                    );
+                    Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
+                }
+            },
+        }
+    }
+
+    pub async fn get_account_with_commitment(
+        &mut self,
+        pubkey: &Pubkey,
+        commitment_level: CommitmentLevel,
+    ) -> Result<DbAccountInfo, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let commitment_level = get_commitment_level_str(commitment_level);
+
+        let statement = &client.get_account_with_commitment_stmt;
+        let client = &mut client.client;
+        let pubkey_v = pubkey.to_bytes().to_vec();
+        let result = client
+            .query(statement, &[&pubkey_v, &commitment_level])
+            .await;
         match result {
             Err(error) => {
                 let msg = format!(
