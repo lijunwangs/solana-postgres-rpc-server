@@ -1,3 +1,5 @@
+use solana_sdk::commitment_config::CommitmentLevel;
+
 use crate::postgres_client::DbAccountInfo;
 
 use {
@@ -271,20 +273,20 @@ pub async fn get_parsed_token_account(
     client: &mut SimplePostgresClient,
     pubkey: &Pubkey,
     account: DbAccountInfo,
-) -> Result<UiAccount> {
+) -> Result<(UiAccount, i64)> {
     if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
         let (_, decimals) = get_mint_owner_and_decimals(client, &mint_pubkey).await?;
         let additional_data = Some(AccountAdditionalData {
             spl_token_decimals: Some(decimals),
         });
 
-        return Ok(UiAccount::encode(
+        return Ok((UiAccount::encode(
             pubkey,
             &account,
             UiAccountEncoding::JsonParsed,
             additional_data,
             None,
-        ));
+        ), account.slot));
     }
 
     Err(Error::invalid_params("Could not find the mint".to_string()))
@@ -296,8 +298,14 @@ async fn get_encoded_account(
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
     commitment: Option<CommitmentConfig>,
-) -> Result<Option<UiAccount>> {
+) -> Result<Option<(UiAccount, i64)>> {
     let result = if let Some(commitment) = commitment {
+        if !(commitment.commitment == CommitmentLevel::Confirmed ||
+            commitment.commitment == CommitmentLevel::Finalized ||
+            commitment.commitment == CommitmentLevel::Processed) {
+                info!("Invalid commitment level: {}", commitment.commitment);
+                return Err(Error::invalid_request());
+            }
         client
             .get_account_with_commitment(pubkey, commitment.commitment)
             .await
@@ -314,13 +322,13 @@ async fn get_encoded_account(
                 let account = get_parsed_token_account(client, pubkey, account).await;
                 account.and_then(|account| Ok(Some(account)))
             } else {
-                Ok(Some(UiAccount::encode(
+                Ok(Some((UiAccount::encode(
                     &account.pubkey,
                     &account,
                     encoding,
                     None,
                     data_slice_config,
-                )))
+                ), account.slot)))
             }
         }
         Err(_err) => Err(Error::internal_error()),
@@ -364,9 +372,15 @@ impl JsonRpcRequestProcessor {
             get_encoded_account(&mut client, pubkey, encoding, data_slice_config, commitment)
                 .await?;
 
+        let slot = if let Some(account) = &account {
+            account.1 as u64
+        } else {
+            0
+        };
+
         Ok(RpcResponse {
-            context: RpcResponseContext { slot: 0 },
-            value: account,
+            context: RpcResponseContext { slot },
+            value: account.and_then(|account| Some(account.0)),
         })
     }
 
@@ -394,6 +408,7 @@ impl JsonRpcRequestProcessor {
                 commitment,
             )
             .await?;
+            let account = account.and_then(|account| Some(account.0));
             accounts.push(account);
         }
 
