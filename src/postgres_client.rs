@@ -4,7 +4,9 @@ use {
         postgres_rpc_server_error::PostgresRpcServerError,
     },
     log::*,
-    solana_sdk::{account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey},
+    solana_sdk::{
+        account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey,
+    },
     std::sync::Mutex,
     tokio_postgres::{
         tls::{NoTls, NoTlsStream},
@@ -124,14 +126,11 @@ impl SimplePostgresClient {
         }
     }
 
-
     /// This get the latest account from account table at certain commitment level.
     async fn build_get_latest_account_at_commitment_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
-
-
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct
             JOIN slot as s ON acct.slot = s.slot \
             WHERE acct.pubkey = $1
