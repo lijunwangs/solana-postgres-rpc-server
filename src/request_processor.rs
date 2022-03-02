@@ -280,13 +280,16 @@ pub async fn get_parsed_token_account(
             spl_token_decimals: Some(decimals),
         });
 
-        return Ok((UiAccount::encode(
-            pubkey,
-            &account,
-            UiAccountEncoding::JsonParsed,
-            additional_data,
-            None,
-        ), account.slot));
+        return Ok((
+            UiAccount::encode(
+                pubkey,
+                &account,
+                UiAccountEncoding::JsonParsed,
+                additional_data,
+                None,
+            ),
+            account.slot,
+        ));
     }
 
     Err(Error::invalid_params("Could not find the mint".to_string()))
@@ -300,12 +303,13 @@ async fn get_encoded_account(
     commitment: Option<CommitmentConfig>,
 ) -> Result<Option<(UiAccount, i64)>> {
     let result = if let Some(commitment) = commitment {
-        if !(commitment.commitment == CommitmentLevel::Confirmed ||
-            commitment.commitment == CommitmentLevel::Finalized ||
-            commitment.commitment == CommitmentLevel::Processed) {
-                info!("Invalid commitment level: {}", commitment.commitment);
-                return Err(Error::invalid_request());
-            }
+        if !(commitment.commitment == CommitmentLevel::Confirmed
+            || commitment.commitment == CommitmentLevel::Finalized
+            || commitment.commitment == CommitmentLevel::Processed)
+        {
+            info!("Invalid commitment level: {}", commitment.commitment);
+            return Err(Error::invalid_request());
+        }
         client
             .get_account_with_commitment(pubkey, commitment.commitment)
             .await
@@ -322,13 +326,10 @@ async fn get_encoded_account(
                 let account = get_parsed_token_account(client, pubkey, account).await;
                 account.and_then(|account| Ok(Some(account)))
             } else {
-                Ok(Some((UiAccount::encode(
-                    &account.pubkey,
-                    &account,
-                    encoding,
-                    None,
-                    data_slice_config,
-                ), account.slot)))
+                Ok(Some((
+                    UiAccount::encode(&account.pubkey, &account, encoding, None, data_slice_config),
+                    account.slot,
+                )))
             }
         }
         Err(_err) => Err(Error::internal_error()),

@@ -159,6 +159,35 @@ impl SimplePostgresClient {
         }
     }
 
+    /// This get the latest slot from slot table at `processed` commitment level.
+    async fn build_get_processed_slot_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN (SELECT max(s2.slot) FROM slot AS s2)";
+        prepare_statement(stmt, client, config).await
+    }
+
+    /// This get the latest slot from slot table at `confirmed` commitment level.
+    async fn build_get_confirmed_slot_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
+            (SELECT max(s2.slot) FROM slot AS s2 AND s2.status in ('confirmed', 'finalized'))";
+        prepare_statement(stmt, client, config).await
+    }
+
+    /// This get the latest slot from slot table at `finalized` commitment level.
+    async fn build_get_finalized_slot_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
+            (SELECT max(s2.slot) FROM slot AS s2 AND s2.status = 'finalized')";
+        prepare_statement(stmt, client, config).await
+    }
+
     async fn build_get_accounts_by_owner_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
