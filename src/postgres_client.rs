@@ -59,6 +59,9 @@ struct PostgresSqlClientWrapper {
     get_accounts_by_owner_stmt: Statement,
     get_accounts_by_token_owner_stmt: Statement,
     get_accounts_by_token_mint_stmt: Statement,
+    get_processed_slot_stmt: Statement,
+    get_confirmed_slot_stmt: Statement,
+    get_finalized_slot_stmt: Statement,
 }
 
 pub struct SimplePostgresClient {
@@ -242,6 +245,15 @@ impl SimplePostgresClient {
         let get_accounts_by_token_mint_stmt =
             Self::build_get_accounts_by_spl_token_mint_stmt(&mut client, config).await?;
 
+        let get_processed_slot_stmt =
+            Self::build_get_finalized_slot_stmt(&mut client, config).await?;
+
+        let get_confirmed_slot_stmt =
+            Self::build_get_confirmed_slot_stmt(&mut client, config).await?;
+
+        let get_finalized_slot_stmt =
+            Self::build_get_finalized_slot_stmt(&mut client, config).await?;
+
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
@@ -251,6 +263,9 @@ impl SimplePostgresClient {
                 get_accounts_by_owner_stmt,
                 get_accounts_by_token_owner_stmt,
                 get_accounts_by_token_mint_stmt,
+                get_processed_slot_stmt,
+                get_confirmed_slot_stmt,
+                get_finalized_slot_stmt,
             }),
         })
     }
