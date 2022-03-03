@@ -3,6 +3,7 @@ use {
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
+    chrono::naive::NaiveDateTime,
     log::*,
     solana_sdk::{
         account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey,
@@ -28,6 +29,13 @@ pub struct DbAccountInfo {
     pub data: Vec<u8>,
     pub slot: i64,
     pub write_version: i64,
+}
+
+pub struct DbSlotInfo {
+    pub slot: i64,
+    pub parent: i64,
+    pub status: String,
+    pub updated_on: NaiveDateTime,
 }
 
 impl ReadableAccount for DbAccountInfo {
@@ -246,7 +254,7 @@ impl SimplePostgresClient {
             Self::build_get_accounts_by_spl_token_mint_stmt(&mut client, config).await?;
 
         let get_processed_slot_stmt =
-            Self::build_get_finalized_slot_stmt(&mut client, config).await?;
+            Self::build_get_processed_slot_stmt(&mut client, config).await?;
 
         let get_confirmed_slot_stmt =
             Self::build_get_confirmed_slot_stmt(&mut client, config).await?;
@@ -376,7 +384,7 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        load_results(result, owner)
+        load_account_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_owner(
@@ -388,7 +396,7 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        load_results(result, owner)
+        load_account_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_mint(
@@ -400,11 +408,44 @@ impl SimplePostgresClient {
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
-        load_results(result, owner)
+        load_account_results(result, owner)
+    }
+
+    pub async fn get_last_processed_slot(
+        &mut self,
+        owner: &Pubkey,
+    ) -> Result<DbSlotInfo, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let statement = &client.get_processed_slot_stmt;
+        let client = &mut client.client;
+        let result = client.query(statement, &[]).await;
+        load_single_slot(result, owner)
+    }
+
+    pub async fn get_last_confirmed_slot(
+        &mut self,
+        owner: &Pubkey,
+    ) -> Result<DbSlotInfo, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let statement = &client.get_confirmed_slot_stmt;
+        let client = &mut client.client;
+        let result = client.query(statement, &[]).await;
+        load_single_slot(result, owner)
+    }
+
+    pub async fn get_last_finalized_slot(
+        &mut self,
+        owner: &Pubkey,
+    ) -> Result<DbSlotInfo, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let statement = &client.get_finalized_slot_stmt;
+        let client = &mut client.client;
+        let result = client.query(statement, &[]).await;
+        load_single_slot(result, owner)
     }
 }
 
-fn load_results(
+fn load_account_results(
     result: Result<Vec<postgres::Row>, postgres::Error>,
     owner: &Pubkey,
 ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
@@ -428,6 +469,55 @@ fn load_results(
                     data: row.get(6),
                     slot: row.get(1),
                     write_version: row.get(7),
+                })
+                .collect();
+            Ok(results)
+        }
+    }
+}
+
+/// Load a single slot record
+fn load_single_slot(result: Result<Vec<postgres::Row>, postgres::Error>,
+    owner: &Pubkey) -> Result<DbSlotInfo, PostgresRpcServerError> {
+    let mut slots = load_slot_results(result, owner)?;
+    match slots.len() {
+        0 => {
+            let msg = "The slot is not found from the database.".to_string();
+            Err(PostgresRpcServerError::ObjectNotFound { msg })            
+        }
+        1 => {
+            Ok(slots.remove(0))
+        }
+        cnt => {
+            let msg = format!(
+                "Found more than 1 slots while expecting one, count: {} from the database.", cnt
+            );
+            Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
+        }
+    }
+}
+
+/// Load a list of DbSlotInfo from a query result.
+fn load_slot_results(
+    result: Result<Vec<postgres::Row>, postgres::Error>,
+    owner: &Pubkey,
+) -> Result<Vec<DbSlotInfo>, PostgresRpcServerError> {
+    match result {
+        Err(error) => {
+            let msg = format!(
+                "Failed load the account from the database. Account: {}, Error: ({:?})",
+                owner, error
+            );
+            Err(PostgresRpcServerError::DatabaseQueryError { msg })
+        }
+        Ok(result) => {
+            let results = result
+                .into_iter()
+                .map(|row| DbSlotInfo {
+                    slot: row.get(0),
+                    parent: row.get(1),
+                    status: row.get(2),
+                    updated_on: row.get(3),
                 })
                 .collect();
             Ok(results)
