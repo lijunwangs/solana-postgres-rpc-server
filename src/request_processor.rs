@@ -336,6 +336,50 @@ async fn get_encoded_account(
     }
 }
 
+
+async fn get_encoded_account_at_slot(
+    client: &mut SimplePostgresClient,
+    pubkey: &Pubkey,
+    encoding: UiAccountEncoding,
+    data_slice_config: Option<UiDataSliceConfig>,
+    commitment: Option<CommitmentConfig>,
+    slot: i64,
+) -> Result<Option<(UiAccount, i64)>> {
+    let result = if let Some(commitment) = commitment {
+        if !(commitment.commitment == CommitmentLevel::Confirmed
+            || commitment.commitment == CommitmentLevel::Finalized
+            || commitment.commitment == CommitmentLevel::Processed)
+        {
+            info!("Invalid commitment level: {}", commitment.commitment);
+            return Err(Error::invalid_request());
+        }
+        client
+            .get_account_with_commitment_and_slot(pubkey, commitment.commitment, slot)
+            .await
+    } else {
+        client.get_account(pubkey).await
+    };
+
+    match result {
+        Ok(account) => {
+            if account.lamports() == 0 {
+                return Ok(None);
+            }
+            if is_known_spl_token_id(account.owner()) && encoding == UiAccountEncoding::JsonParsed {
+                let account = get_parsed_token_account(client, pubkey, account).await;
+                account.and_then(|account| Ok(Some(account)))
+            } else {
+                Ok(Some((
+                    UiAccount::encode(&account.pubkey, &account, encoding, None, data_slice_config),
+                    account.slot,
+                )))
+            }
+        }
+        Err(_err) => Err(Error::internal_error()),
+    }
+}
+
+
 impl From<PostgresRpcServerError> for Error {
     fn from(error: PostgresRpcServerError) -> Self {
         match error {

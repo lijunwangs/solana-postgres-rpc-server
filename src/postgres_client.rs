@@ -70,6 +70,7 @@ struct PostgresSqlClientWrapper {
     get_processed_slot_stmt: Statement,
     get_confirmed_slot_stmt: Statement,
     get_finalized_slot_stmt: Statement,
+    get_account_with_commitment_and_slot_stmt: Statement,
 }
 
 pub struct SimplePostgresClient {
@@ -170,6 +171,30 @@ impl SimplePostgresClient {
         }
     }
 
+    /// This get the latest account from account table at certain commitment level.
+    async fn build_get_account_with_commitment_and_slot_stmt(
+        client: &mut Client,
+        config: &PostgresRpcServerConfig,
+    ) -> Result<Statement, PostgresRpcServerError> {
+        let stmt = "SELECT get_account_with_commitment_level_and_slot($1, $2, $3)";
+        info!("Preparing statement {}", stmt);
+        let stmt = client.prepare(stmt).await;
+        info!("Prepared statement, ok? {}", stmt.is_ok());
+
+        match stmt {
+            Err(err) => {
+                return Err(PostgresRpcServerError::DataSchemaError {
+                    msg: format!(
+                        "Error in preparing for the accounts select by key for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
+                        err, config.host, config.user, config
+                    ),
+                });
+            }
+            Ok(stmt) => Ok(stmt),
+        }
+    }
+
+
     /// This get the latest slot from slot table at `processed` commitment level.
     async fn build_get_processed_slot_stmt(
         client: &mut Client,
@@ -262,6 +287,9 @@ impl SimplePostgresClient {
         let get_finalized_slot_stmt =
             Self::build_get_finalized_slot_stmt(&mut client, config).await?;
 
+        let get_account_with_commitment_and_slot_stmt =
+            Self::build_get_account_with_commitment_and_slot_stmt(&mut client, config).await?;
+
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: Mutex::new(PostgresSqlClientWrapper {
@@ -274,6 +302,7 @@ impl SimplePostgresClient {
                 get_processed_slot_stmt,
                 get_confirmed_slot_stmt,
                 get_finalized_slot_stmt,
+                get_account_with_commitment_and_slot_stmt,
             }),
         })
     }
@@ -337,6 +366,62 @@ impl SimplePostgresClient {
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client
             .query(statement, &[&pubkey_v, &commitment_level])
+            .await;
+        match result {
+            Err(error) => {
+                let msg = format!(
+                    "Failed load the account from the database. Account: {}, Error: ({:?})",
+                    pubkey, error
+                );
+                Err(PostgresRpcServerError::DatabaseQueryError { msg })
+            }
+            Ok(result) => match result.len() {
+                0 => {
+                    let msg = format!(
+                        "The account with key {} is not found from the database.",
+                        pubkey
+                    );
+                    Err(PostgresRpcServerError::ObjectNotFound { msg })
+                }
+                1 => Ok(DbAccountInfo {
+                    pubkey: Pubkey::new(result[0].get(0)),
+                    lamports: result[0].get(3),
+                    owner: result[0].get(2),
+                    executable: result[0].get(4),
+                    rent_epoch: result[0].get(5),
+                    data: result[0].get(6),
+                    slot: result[0].get(1),
+                    write_version: result[0].get(7),
+                }),
+                cnt => {
+                    let msg = format!(
+                        "Found more than 1 accounts with the key {} count: {} from the database.",
+                        pubkey, cnt
+                    );
+                    Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
+                }
+            },
+        }
+    }
+
+
+    /// Get the account with the set commitment at the slot
+    /// so that the account is consistent at that slot or an older slot
+    /// with the set commitment level.
+    pub async fn get_account_with_commitment_and_slot(
+        &mut self,
+        pubkey: &Pubkey,
+        commitment_level: CommitmentLevel,
+        slot: i64
+    ) -> Result<DbAccountInfo, PostgresRpcServerError> {
+        let client = self.client.get_mut().unwrap();
+        let commitment_level = get_commitment_level_str(commitment_level);
+
+        let statement = &client.get_account_with_commitment_and_slot_stmt;
+        let client = &mut client.client;
+        let pubkey_v = pubkey.to_bytes().to_vec();
+        let result = client
+            .query(statement, &[&pubkey_v, &commitment_level, &slot])
             .await;
         match result {
             Err(error) => {
