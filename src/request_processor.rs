@@ -465,12 +465,13 @@ impl JsonRpcRequestProcessor {
 
         let commitment = config.commitment;
         for pubkey in pubkeys {
-            let account = get_encoded_account(
+            let account = get_encoded_account_at_slot(
                 &mut client,
                 &pubkey,
                 encoding,
                 config.data_slice,
                 commitment,
+                slot_info.slot,
             )
             .await?;
             let account = account.and_then(|account| Some(account.0));
