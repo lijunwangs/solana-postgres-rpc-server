@@ -1,6 +1,6 @@
 use solana_sdk::commitment_config::CommitmentLevel;
 
-use crate::postgres_client::DbAccountInfo;
+use crate::postgres_client::{DbAccountInfo, DbSlotInfo};
 
 use {
     crate::{
@@ -385,6 +385,25 @@ impl JsonRpcRequestProcessor {
         })
     }
 
+    async fn get_slot_with_commitment(
+        client: &mut SimplePostgresClient,
+        commitment_config: Option<CommitmentConfig>,
+    ) -> Result<DbSlotInfo> {
+        let slot_info = match commitment_config {
+            Some(commitment_config) => match commitment_config.commitment {
+                CommitmentLevel::Confirmed => client.get_last_confirmed_slot().await?,
+                CommitmentLevel::Finalized => client.get_last_finalized_slot().await?,
+                CommitmentLevel::Processed => client.get_last_processed_slot().await?,
+                _ => {
+                    return Err(Error::invalid_request());
+                }
+            },
+            None => client.get_last_processed_slot().await?,
+        };
+
+        Ok(slot_info)
+    }
+
     pub async fn get_multiple_accounts(
         &self,
         pubkeys: Vec<Pubkey>,
@@ -396,6 +415,7 @@ impl JsonRpcRequestProcessor {
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
         let mut client = self.db_client.lock().await;
+        let slot_info = Self::get_slot_with_commitment(&mut client, config.commitment).await?;
 
         let mut accounts = Vec::new();
 
