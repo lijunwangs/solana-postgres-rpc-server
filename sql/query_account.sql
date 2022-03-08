@@ -30,7 +30,7 @@ BEGIN
             WHERE s.slot < s2.slot
             AND acct2.pubkey = input_pubkey
             AND (commitment_level = 'processed' OR
-                (commitment_level = 'confirmed' AND s2.status in 'confirmed', 'finalized') OR
+                (commitment_level = 'confirmed' AND s2.status in ('confirmed', 'finalized')) OR
                 (commitment_level = 'finalized' AND s2.status = 'finalized')
             )
         )
