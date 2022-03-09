@@ -336,7 +336,6 @@ async fn get_encoded_account(
     }
 }
 
-
 async fn get_encoded_account_at_slot(
     client: &mut SimplePostgresClient,
     pubkey: &Pubkey,
@@ -378,7 +377,6 @@ async fn get_encoded_account_at_slot(
         Err(_err) => Err(Error::internal_error()),
     }
 }
-
 
 impl From<PostgresRpcServerError> for Error {
     fn from(error: PostgresRpcServerError) -> Self {

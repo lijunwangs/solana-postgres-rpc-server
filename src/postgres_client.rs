@@ -194,7 +194,6 @@ impl SimplePostgresClient {
         }
     }
 
-
     /// This get the latest slot from slot table at `processed` commitment level.
     async fn build_get_processed_slot_stmt(
         client: &mut Client,
@@ -210,7 +209,7 @@ impl SimplePostgresClient {
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 AND s2.status in ('confirmed', 'finalized'))";
+            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'finalized'))";
         prepare_statement(stmt, client, config).await
     }
 
@@ -220,7 +219,7 @@ impl SimplePostgresClient {
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 AND s2.status = 'finalized')";
+            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'finalized')";
         prepare_statement(stmt, client, config).await
     }
 
@@ -237,8 +236,9 @@ impl SimplePostgresClient {
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
-        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
-            JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.inner_key\
+        let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
+            acct.data, acct.write_version, acct.updated_on FROM account AS acct \
+            JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.owner_key \
             WHERE owner_idx.owner_key = $1";
         prepare_statement(stmt, client, config).await
     }
@@ -247,8 +247,9 @@ impl SimplePostgresClient {
         client: &mut Client,
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
-        let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
-            JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.inner_key\
+        let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
+            acct.data, acct.write_version, acct.updated_on FROM account AS acct \
+            JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.mint_key \
             WHERE owner_idx.mint_key = $1";
         prepare_statement(stmt, client, config).await
     }
@@ -404,7 +405,6 @@ impl SimplePostgresClient {
         }
     }
 
-
     /// Get the account with the set commitment at the slot
     /// so that the account is consistent at that slot or an older slot
     /// with the set commitment level.
@@ -412,7 +412,7 @@ impl SimplePostgresClient {
         &mut self,
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
-        slot: i64
+        slot: i64,
     ) -> Result<DbAccountInfo, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let commitment_level = get_commitment_level_str(commitment_level);
@@ -606,17 +606,17 @@ async fn prepare_statement(
     config: &PostgresRpcServerConfig,
 ) -> Result<Statement, PostgresRpcServerError> {
     info!("Preparing statement {}", stmt);
-    let stmt = client.prepare(stmt).await;
-    info!("Prepared statement, ok? {}", stmt.is_ok());
-    match stmt {
+    let result = client.prepare(stmt).await;
+    info!("Prepared statement, ok? {}", result.is_ok());
+    match result {
         Err(err) => {
             return Err(PostgresRpcServerError::DataSchemaError {
                 msg: format!(
-                    "Error in preparing for the accounts select by token owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                    err, config.host, config.user, config
+                    "Error in preparing for the accounts select by token owner for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}, stmt: {}",
+                    err, config.host, config.user, config, stmt
                 ),
             });
         }
-        Ok(stmt) => Ok(stmt),
+        Ok(statement) => Ok(statement),
     }
 }
