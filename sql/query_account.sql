@@ -58,7 +58,10 @@ BEGIN
     JOIN slot AS s ON acct.slot = s.slot
     WHERE acct.pubkey = input_pubkey
     AND s.slot <= max_slot
-    AND s.status = commitment_level INTO ret;
+    AND ( (commitment_level = 'processed' AND s.status in ('processed', 'confirmed', 'rooted')) OR 
+          (commitment_level = 'confirmed' AND s.status in ('confirmed', 'rooted')) OR
+          (commitment_level = 'rooted' AND s.status in ('rooted')))
+    INTO ret;
 
     IF NOT FOUND THEN
         SELECT acct1.* FROM account_audit AS acct1
