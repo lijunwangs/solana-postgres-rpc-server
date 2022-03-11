@@ -47,23 +47,22 @@ CREATE OR REPLACE FUNCTION get_account_with_commitment_level_and_slot(
     commitment_level VARCHAR(16),
     max_slot BIGINT
 )
-RETURNS RECORD
+RETURNS SETOF account
 LANGUAGE plpgsql
 AS
 $$
-DECLARE
-ret RECORD;
 BEGIN
+    RETURN QUERY
     SELECT acct.* FROM account AS acct
     JOIN slot AS s ON acct.slot = s.slot
     WHERE acct.pubkey = input_pubkey
     AND s.slot <= max_slot
     AND ( (commitment_level = 'processed' AND s.status in ('processed', 'confirmed', 'rooted')) OR 
           (commitment_level = 'confirmed' AND s.status in ('confirmed', 'rooted')) OR
-          (commitment_level = 'rooted' AND s.status in ('rooted')))
-    INTO ret;
+          (commitment_level = 'rooted' AND s.status in ('rooted')));
 
     IF NOT FOUND THEN
+        RETURN QUERY
         SELECT acct1.* FROM account_audit AS acct1
         JOIN slot AS s ON acct1.slot = s.slot
         WHERE acct1.pubkey = input_pubkey
@@ -79,10 +78,9 @@ BEGIN
                 (commitment_level = 'rooted' AND s2.status = 'rooted')
             )
             AND s2.slot <= max_slot
-        )
-        INTO ret;
+        );
     END IF;
-    RETURN ret;
+    RETURN;
 END;
 
 $$;
