@@ -308,6 +308,7 @@ impl SimplePostgresClient {
         })
     }
 
+    /// Get the latest account regardless its commitment level
     pub async fn get_account(
         &mut self,
         pubkey: &Pubkey,
@@ -323,6 +324,7 @@ impl SimplePostgresClient {
                     "Failed load the account from the database. Account: {}, Error: ({:?})",
                     pubkey, error
                 );
+                info!("{}", msg);
                 Err(PostgresRpcServerError::DatabaseQueryError { msg })
             }
             Ok(result) => match result.len() {
