@@ -333,6 +333,7 @@ impl SimplePostgresClient {
                         "The account with key {} is not found from the database.",
                         pubkey
                     );
+                    info!("{}", msg);
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
                 1 => Ok(DbAccountInfo {
@@ -350,6 +351,7 @@ impl SimplePostgresClient {
                         "Found more than 1 accounts with the key {} count: {} from the database.",
                         pubkey, cnt
                     );
+                    info!("{}", msg);
                     Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
                 }
             },
