@@ -80,7 +80,7 @@ pub struct SimplePostgresClient {
 fn get_commitment_level_str(commitment: CommitmentLevel) -> &'static str {
     match commitment {
         CommitmentLevel::Confirmed => "confirmed",
-        CommitmentLevel::Finalized => "finalized",
+        CommitmentLevel::Finalized => "rooted",
         CommitmentLevel::Processed => "processed",
         _ => "unsupported",
     }
@@ -209,7 +209,7 @@ impl SimplePostgresClient {
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'finalized'))";
+            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'rooted'))";
         prepare_statement(stmt, client, config).await
     }
 
@@ -219,7 +219,7 @@ impl SimplePostgresClient {
         config: &PostgresRpcServerConfig,
     ) -> Result<Statement, PostgresRpcServerError> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'finalized')";
+            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'rooted')";
         prepare_statement(stmt, client, config).await
     }
 
