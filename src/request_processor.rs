@@ -332,7 +332,7 @@ async fn get_encoded_account(
                 )))
             }
         }
-        Err(_err) => Err(Error::internal_error()),
+        Err(err) => Err(Error::from(err)),
     }
 }
 
@@ -403,7 +403,7 @@ impl JsonRpcRequestProcessor {
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
-        info!("getting account_info is called... {}", pubkey);
+        info!("getting account_info is called for {}", pubkey);
         let config = config.unwrap_or_default();
         let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
