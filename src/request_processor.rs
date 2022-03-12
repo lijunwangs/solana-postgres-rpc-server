@@ -304,7 +304,8 @@ fn validate_commitment_level(commitment_level: CommitmentLevel) -> Result<()> {
     {
         return Err(Error::invalid_params(
             format!(
-                "Invalid commitment level, supported are (\"{}\", \"{}\", \"{}\")",
+                "Invalid commitment level \"{}\", supported are (\"{}\", \"{}\", \"{}\")",
+                commitment_level,
                 CommitmentLevel::Processed,
                 CommitmentLevel::Confirmed,
                 CommitmentLevel::Finalized
