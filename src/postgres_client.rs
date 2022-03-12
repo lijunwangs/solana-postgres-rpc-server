@@ -16,6 +16,9 @@ use {
     },
 };
 
+/// A Result type.
+pub type ServerResult<T> = std::result::Result<T, PostgresRpcServerError>;
+
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
 impl Eq for AccountInfo {}
@@ -104,7 +107,7 @@ fn get_commitment_level_str(commitment: CommitmentLevel) -> &'static str {
 impl SimplePostgresClient {
     pub async fn connect_to_db(
         config: &PostgresRpcServerConfig,
-    ) -> Result<(Client, Connection<Socket, NoTlsStream>), PostgresRpcServerError> {
+    ) -> ServerResult<(Client, Connection<Socket, NoTlsStream>)> {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
         let connection_str = if let Some(connection_str) = &config.connection_str {
@@ -143,7 +146,7 @@ impl SimplePostgresClient {
     async fn build_get_account_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE pubkey = $1";
         info!("Preparing statement {}", stmt);
@@ -167,7 +170,7 @@ impl SimplePostgresClient {
     async fn build_get_account_with_commitment_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT get_account_with_commitment_level($1, $2)";
         info!("Preparing statement {}", stmt);
         let stmt = client.prepare(stmt).await;
@@ -190,7 +193,7 @@ impl SimplePostgresClient {
     async fn build_get_account_with_commitment_and_slot_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT get_account_with_commitment_level_and_slot($1, $2, $3)";
         info!("Preparing statement {}", stmt);
         let stmt = client.prepare(stmt).await;
@@ -213,7 +216,7 @@ impl SimplePostgresClient {
     async fn build_get_processed_slot_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN (SELECT max(s2.slot) FROM slot AS s2)";
         prepare_statement(stmt, client, config).await
     }
@@ -222,7 +225,7 @@ impl SimplePostgresClient {
     async fn build_get_confirmed_slot_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
             (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'rooted'))";
         prepare_statement(stmt, client, config).await
@@ -232,7 +235,7 @@ impl SimplePostgresClient {
     async fn build_get_finalized_slot_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
             (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'rooted')";
         prepare_statement(stmt, client, config).await
@@ -241,7 +244,7 @@ impl SimplePostgresClient {
     async fn build_get_accounts_by_owner_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE owner = $1";
         prepare_statement(stmt, client, config).await
@@ -250,7 +253,7 @@ impl SimplePostgresClient {
     async fn build_get_accounts_by_spl_token_owner_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.owner_key \
@@ -261,7 +264,7 @@ impl SimplePostgresClient {
     async fn build_get_accounts_by_spl_token_mint_stmt(
         client: &mut Client,
         config: &PostgresRpcServerConfig,
-    ) -> Result<Statement, PostgresRpcServerError> {
+    ) -> ServerResult<Statement> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.mint_key \
@@ -269,7 +272,7 @@ impl SimplePostgresClient {
         prepare_statement(stmt, client, config).await
     }
 
-    pub async fn new(config: &PostgresRpcServerConfig) -> Result<Self, PostgresRpcServerError> {
+    pub async fn new(config: &PostgresRpcServerConfig) -> ServerResult<Self> {
         info!("Creating SimplePostgresClient...");
         let (mut client, connection) = Self::connect_to_db(config).await?;
 
@@ -324,10 +327,7 @@ impl SimplePostgresClient {
     }
 
     /// Get the latest account regardless its commitment level
-    pub async fn get_account(
-        &mut self,
-        pubkey: &Pubkey,
-    ) -> Result<AccountInfo, PostgresRpcServerError> {
+    pub async fn get_account(&mut self, pubkey: &Pubkey) -> ServerResult<AccountInfo> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_account_stmt;
         let client = &mut client.client;
@@ -377,7 +377,7 @@ impl SimplePostgresClient {
         &mut self,
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
-    ) -> Result<AccountInfo, PostgresRpcServerError> {
+    ) -> ServerResult<AccountInfo> {
         let client = self.client.get_mut().unwrap();
         let commitment_level = get_commitment_level_str(commitment_level);
 
@@ -432,7 +432,7 @@ impl SimplePostgresClient {
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
         slot: i64,
-    ) -> Result<AccountInfo, PostgresRpcServerError> {
+    ) -> ServerResult<AccountInfo> {
         let client = self.client.get_mut().unwrap();
         let commitment_level = get_commitment_level_str(commitment_level);
 
@@ -490,7 +490,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_owner(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
+    ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_owner_stmt;
         let client = &mut client.client;
@@ -502,7 +502,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_spl_token_owner(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
+    ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_owner_stmt;
         let client = &mut client.client;
@@ -514,7 +514,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_spl_token_mint(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
+    ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_mint_stmt;
         let client = &mut client.client;
@@ -523,7 +523,7 @@ impl SimplePostgresClient {
         load_account_results(result, owner)
     }
 
-    pub async fn get_last_processed_slot(&mut self) -> Result<DbSlotInfo, PostgresRpcServerError> {
+    pub async fn get_last_processed_slot(&mut self) -> ServerResult<DbSlotInfo> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_processed_slot_stmt;
         let client = &mut client.client;
@@ -531,7 +531,7 @@ impl SimplePostgresClient {
         load_single_slot(result)
     }
 
-    pub async fn get_last_confirmed_slot(&mut self) -> Result<DbSlotInfo, PostgresRpcServerError> {
+    pub async fn get_last_confirmed_slot(&mut self) -> ServerResult<DbSlotInfo> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_confirmed_slot_stmt;
         let client = &mut client.client;
@@ -539,7 +539,7 @@ impl SimplePostgresClient {
         load_single_slot(result)
     }
 
-    pub async fn get_last_finalized_slot(&mut self) -> Result<DbSlotInfo, PostgresRpcServerError> {
+    pub async fn get_last_finalized_slot(&mut self) -> ServerResult<DbSlotInfo> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_finalized_slot_stmt;
         let client = &mut client.client;
@@ -551,7 +551,7 @@ impl SimplePostgresClient {
 fn load_account_results(
     result: Result<Vec<postgres::Row>, postgres::Error>,
     owner: &Pubkey,
-) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
+) -> ServerResult<Vec<AccountInfo>> {
     match result {
         Err(error) => {
             let msg = format!(
@@ -582,7 +582,7 @@ fn load_account_results(
 /// Load a single slot record
 fn load_single_slot(
     result: Result<Vec<postgres::Row>, postgres::Error>,
-) -> Result<DbSlotInfo, PostgresRpcServerError> {
+) -> ServerResult<DbSlotInfo> {
     let mut slots = load_slot_results(result)?;
     match slots.len() {
         0 => {
@@ -603,7 +603,7 @@ fn load_single_slot(
 /// Load a list of DbSlotInfo from a query result.
 fn load_slot_results(
     result: Result<Vec<postgres::Row>, postgres::Error>,
-) -> Result<Vec<DbSlotInfo>, PostgresRpcServerError> {
+) -> ServerResult<Vec<DbSlotInfo>> {
     match result {
         Err(error) => {
             let msg = format!(
@@ -631,7 +631,7 @@ async fn prepare_statement(
     stmt: &str,
     client: &mut Client,
     config: &PostgresRpcServerConfig,
-) -> Result<Statement, PostgresRpcServerError> {
+) -> ServerResult<Statement> {
     info!("Preparing statement {}", stmt);
     let result = client.prepare(stmt).await;
     info!("Prepared statement, ok? {}", result.is_ok());

@@ -4,8 +4,10 @@ use crate::postgres_client::{AccountInfo, DbSlotInfo};
 
 use {
     crate::{
-        postgres_client::SimplePostgresClient, postgres_rpc_server_error::PostgresRpcServerError,
-        rpc::OptionalContext, rpc_service::JsonRpcConfig,
+        postgres_client::{ServerResult, SimplePostgresClient},
+        postgres_rpc_server_error::PostgresRpcServerError,
+        rpc::OptionalContext,
+        rpc_service::JsonRpcConfig,
     },
     jsonrpc_core::{futures::lock::Mutex, types::error, types::Error, Metadata, Result},
     log::*,
@@ -295,6 +297,24 @@ pub async fn get_parsed_token_account(
     Err(Error::invalid_params("Could not find the mint".to_string()))
 }
 
+fn validate_commitment_level(commitment_level: CommitmentLevel) -> Result<()> {
+    if !(commitment_level == CommitmentLevel::Processed
+        || commitment_level == CommitmentLevel::Confirmed
+        || commitment_level == CommitmentLevel::Finalized)
+    {
+        return Err(Error::invalid_params(
+            format!(
+                "Invalid commitment level, supported are ({} {} {})",
+                CommitmentLevel::Processed,
+                CommitmentLevel::Confirmed,
+                CommitmentLevel::Finalized
+            )
+            .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 async fn get_encoded_account(
     client: &mut SimplePostgresClient,
     pubkey: &Pubkey,
@@ -303,13 +323,7 @@ async fn get_encoded_account(
     commitment: Option<CommitmentConfig>,
 ) -> Result<Option<(UiAccount, i64)>> {
     let result = if let Some(commitment) = commitment {
-        if !(commitment.commitment == CommitmentLevel::Confirmed
-            || commitment.commitment == CommitmentLevel::Finalized
-            || commitment.commitment == CommitmentLevel::Processed)
-        {
-            info!("Invalid commitment level: {}", commitment.commitment);
-            return Err(Error::invalid_request());
-        }
+        validate_commitment_level(commitment.commitment)?;
         client
             .get_account_with_commitment(pubkey, commitment.commitment)
             .await
@@ -345,13 +359,7 @@ async fn get_encoded_account_at_slot(
     slot: i64,
 ) -> Result<Option<(UiAccount, i64)>> {
     let result = if let Some(commitment) = commitment {
-        if !(commitment.commitment == CommitmentLevel::Confirmed
-            || commitment.commitment == CommitmentLevel::Finalized
-            || commitment.commitment == CommitmentLevel::Processed)
-        {
-            info!("Invalid commitment level: {}", commitment.commitment);
-            return Err(Error::invalid_request());
-        }
+        validate_commitment_level(commitment.commitment)?;
         client
             .get_account_with_commitment_and_slot(pubkey, commitment.commitment, slot)
             .await
@@ -359,6 +367,16 @@ async fn get_encoded_account_at_slot(
         client.get_account(pubkey).await
     };
 
+    load_account_result(result, encoding, client, pubkey, data_slice_config).await
+}
+
+async fn load_account_result(
+    result: ServerResult<AccountInfo>,
+    encoding: UiAccountEncoding,
+    client: &mut SimplePostgresClient,
+    pubkey: &Pubkey,
+    data_slice_config: Option<UiDataSliceConfig>,
+) -> Result<Option<(UiAccount, i64)>> {
     match result {
         Ok(account) => {
             if account.lamports() == 0 {
@@ -377,12 +395,8 @@ async fn get_encoded_account_at_slot(
         Err(err) => {
             info!("Got error when loading from the database {:?}", err);
             match err {
-                PostgresRpcServerError::ObjectNotFound {msg: _} => {
-                    Ok(None)
-                }
-                _ => {
-                    Err(Error::internal_error())
-                }
+                PostgresRpcServerError::ObjectNotFound { msg: _ } => Ok(None),
+                _ => Err(Error::internal_error()),
             }
         }
     }
@@ -447,7 +461,15 @@ impl JsonRpcRequestProcessor {
                 CommitmentLevel::Finalized => client.get_last_finalized_slot().await?,
                 CommitmentLevel::Processed => client.get_last_processed_slot().await?,
                 _ => {
-                    return Err(Error::invalid_request());
+                    return Err(Error::invalid_params(
+                        format!(
+                            "Invalid commitment level, supported are ({} {} {})",
+                            CommitmentLevel::Processed,
+                            CommitmentLevel::Confirmed,
+                            CommitmentLevel::Finalized
+                        )
+                        .to_string(),
+                    ));
                 }
             },
             None => client.get_last_processed_slot().await?,
@@ -482,7 +504,7 @@ impl JsonRpcRequestProcessor {
                 slot_info.slot,
             )
             .await?;
-            
+
             if account.is_none() {
                 continue;
             }
