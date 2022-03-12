@@ -449,6 +449,7 @@ impl SimplePostgresClient {
                     "Failed load the account from the database. Account: {}, Error: ({:?})",
                     pubkey, error
                 );
+                error!("{}", msg);
                 Err(PostgresRpcServerError::DatabaseQueryError { msg })
             }
             Ok(result) => match result.len() {
@@ -478,6 +479,7 @@ impl SimplePostgresClient {
                         "Found more than 1 accounts with the key {} count: {} from the database.",
                         pubkey, cnt
                     );
+                    error!("{}", msg);
                     Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
                 }
             },
