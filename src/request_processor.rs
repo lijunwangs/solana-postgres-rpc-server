@@ -374,7 +374,17 @@ async fn get_encoded_account_at_slot(
                 )))
             }
         }
-        Err(_err) => Err(Error::internal_error()),
+        Err(err) => {
+            info!("Got error when loading from the database {:?}", err);
+            match err {
+                PostgresRpcServerError::ObjectNotFound {msg: _} => {
+                    Ok(None)
+                }
+                _ => {
+                    Err(Error::internal_error())
+                }
+            }
+        }
     }
 }
 
@@ -472,6 +482,10 @@ impl JsonRpcRequestProcessor {
                 slot_info.slot,
             )
             .await?;
+            
+            if account.is_none() {
+                continue;
+            }
             let account = account.and_then(|account| Some(account.0));
             accounts.push(account);
         }
