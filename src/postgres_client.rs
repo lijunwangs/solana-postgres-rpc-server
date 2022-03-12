@@ -22,27 +22,28 @@ impl Eq for AccountInfo {}
 
 
 #[derive(Clone, PartialEq, FromSql, Debug)]
+#[postgres(name = "account")]
 pub struct DbAccountInfo {
     pub pubkey: Vec<u8>,
-    pub lamports: i64,
     pub owner: Vec<u8>,
+    pub lamports: i64,
+    pub slot: i64,
     pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
-    pub slot: i64,
     pub write_version: i64,
+    pub updated_on: NaiveDateTime,
 }
-
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct AccountInfo {
     pub pubkey: Pubkey,
-    pub lamports: i64,
     pub owner: Pubkey,
+    pub lamports: i64,
+    pub slot: i64,
     pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
-    pub slot: i64,
     pub write_version: i64,
 }
 
