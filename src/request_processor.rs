@@ -1,10 +1,9 @@
-use solana_sdk::commitment_config::CommitmentLevel;
-
-use crate::postgres_client::{AccountInfo, DbSlotInfo};
+/// The JSON request processor
+/// This takes the request from the client and load the information from the datastore.
 
 use {
     crate::{
-        postgres_client::{ServerResult, SimplePostgresClient},
+        postgres_client::{AccountInfo, DbSlotInfo, ServerResult, SimplePostgresClient},
         postgres_rpc_server_error::PostgresRpcServerError,
         rpc::OptionalContext,
         rpc_service::JsonRpcConfig,
@@ -30,7 +29,7 @@ use {
     },
     solana_sdk::{
         account::ReadableAccount,
-        commitment_config::CommitmentConfig,
+        commitment_config::{CommitmentConfig, CommitmentLevel},
         program_pack::Pack,
         pubkey::{Pubkey, PUBKEY_BYTES},
     },
@@ -101,6 +100,7 @@ fn optimize_filters(filters: &mut Vec<RpcFilterType>) {
     })
 }
 
+/// Encode the account loaded to the UiAccount
 fn encode_account<T: ReadableAccount>(
     account: &T,
     pubkey: &Pubkey,
@@ -207,10 +207,11 @@ fn get_spl_token_mint_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> 
     }
 }
 
+/// Apply the filers on the loaded accounts
 fn filter_accounts(
     config: Option<RpcAccountInfoConfig>,
     mut filters: Vec<RpcFilterType>,
-    accounts: Vec<crate::postgres_client::AccountInfo>,
+    accounts: Vec<AccountInfo>,
     program_id: &Pubkey,
 ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
     let mut keyed_accounts = Vec::new();
@@ -271,9 +272,9 @@ pub async fn get_mint_owner_and_decimals(
     }
 }
 
-pub async fn get_parsed_token_account(
+/// Load additional information about the token account specified by `account`.
+async fn get_parsed_token_account(
     client: &mut SimplePostgresClient,
-    pubkey: &Pubkey,
     account: AccountInfo,
 ) -> Result<(UiAccount, i64)> {
     if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
@@ -284,7 +285,7 @@ pub async fn get_parsed_token_account(
 
         return Ok((
             UiAccount::encode(
-                pubkey,
+                &account.pubkey,
                 &account,
                 UiAccountEncoding::JsonParsed,
                 additional_data,
@@ -297,6 +298,7 @@ pub async fn get_parsed_token_account(
     Err(Error::invalid_params("Could not find the mint".to_string()))
 }
 
+/// Validate the input commitment level.
 fn validate_commitment_level(commitment_level: CommitmentLevel) -> Result<()> {
     if !(commitment_level == CommitmentLevel::Processed
         || commitment_level == CommitmentLevel::Confirmed
@@ -338,7 +340,7 @@ async fn get_encoded_account(
                 return Ok(None);
             }
             if is_known_spl_token_id(account.owner()) && encoding == UiAccountEncoding::JsonParsed {
-                let account = get_parsed_token_account(client, pubkey, account).await;
+                let account = get_parsed_token_account(client, account).await;
                 account.and_then(|account| Ok(Some(account)))
             } else {
                 Ok(Some((
@@ -351,18 +353,19 @@ async fn get_encoded_account(
     }
 }
 
+/// Get an account with slot <= max_slot and the specified commitment and encode it.
 async fn get_encoded_account_at_slot(
     client: &mut SimplePostgresClient,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
     commitment: Option<CommitmentConfig>,
-    slot: i64,
+    max_slot: i64,
 ) -> Result<Option<(UiAccount, i64)>> {
     let result = if let Some(commitment) = commitment {
         validate_commitment_level(commitment.commitment)?;
         client
-            .get_account_with_commitment_and_slot(pubkey, commitment.commitment, slot)
+            .get_account_with_commitment_and_slot(pubkey, commitment.commitment, max_slot)
             .await
     } else {
         client.get_account(pubkey).await
@@ -384,7 +387,7 @@ async fn load_account_result(
                 return Ok(None);
             }
             if is_known_spl_token_id(account.owner()) && encoding == UiAccountEncoding::JsonParsed {
-                let account = get_parsed_token_account(client, pubkey, account).await;
+                let account = get_parsed_token_account(client, account).await;
                 account.and_then(|account| Ok(Some(account)))
             } else {
                 Ok(Some((
@@ -394,7 +397,7 @@ async fn load_account_result(
             }
         }
         Err(err) => {
-            info!("Got error when loading from the database {:?}", err);
+            info!("Got error when loading from the database {} for account {}", err, pubkey);
             match err {
                 PostgresRpcServerError::ObjectNotFound { msg: _ } => Ok(None),
                 _ => Err(Error::internal_error()),
@@ -423,6 +426,7 @@ impl JsonRpcRequestProcessor {
         }
     }
 
+    /// Get account infor for a single account with the pubkey.
     pub async fn get_account_info(
         &mut self,
         pubkey: &Pubkey,
@@ -452,6 +456,7 @@ impl JsonRpcRequestProcessor {
         })
     }
 
+    /// Get the slot with specified commitment level
     async fn get_slot_with_commitment(
         client: &mut SimplePostgresClient,
         commitment_config: Option<CommitmentConfig>,
@@ -474,6 +479,7 @@ impl JsonRpcRequestProcessor {
         Ok(slot_info)
     }
 
+    /// Load multiple accounts
     pub async fn get_multiple_accounts(
         &self,
         pubkeys: Vec<Pubkey>,
