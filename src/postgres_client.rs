@@ -11,19 +11,34 @@ use {
     std::sync::Mutex,
     tokio_postgres::{
         tls::{NoTls, NoTlsStream},
+        types::FromSql,
         Client, Connection, Socket, Statement,
     },
 };
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
-impl Eq for DbAccountInfo {}
+impl Eq for AccountInfo {}
 
-#[derive(Clone, PartialEq, Debug)]
+
+#[derive(Clone, PartialEq, FromSql, Debug)]
 pub struct DbAccountInfo {
-    pub pubkey: Pubkey,
+    pub pubkey: Vec<u8>,
     pub lamports: i64,
     pub owner: Vec<u8>,
+    pub executable: bool,
+    pub rent_epoch: i64,
+    pub data: Vec<u8>,
+    pub slot: i64,
+    pub write_version: i64,
+}
+
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct AccountInfo {
+    pub pubkey: Pubkey,
+    pub lamports: i64,
+    pub owner: Pubkey,
     pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
@@ -38,7 +53,7 @@ pub struct DbSlotInfo {
     pub updated_on: NaiveDateTime,
 }
 
-impl ReadableAccount for DbAccountInfo {
+impl ReadableAccount for AccountInfo {
     fn lamports(&self) -> u64 {
         self.lamports as u64
     }
@@ -48,7 +63,7 @@ impl ReadableAccount for DbAccountInfo {
     }
 
     fn owner(&self) -> &Pubkey {
-        &self.pubkey
+        &self.owner
     }
 
     fn executable(&self) -> bool {
@@ -312,7 +327,7 @@ impl SimplePostgresClient {
     pub async fn get_account(
         &mut self,
         pubkey: &Pubkey,
-    ) -> Result<DbAccountInfo, PostgresRpcServerError> {
+    ) -> Result<AccountInfo, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_account_stmt;
         let client = &mut client.client;
@@ -336,10 +351,10 @@ impl SimplePostgresClient {
                     info!("{}", msg);
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
-                1 => Ok(DbAccountInfo {
+                1 => Ok(AccountInfo {
                     pubkey: Pubkey::new(result[0].get(0)),
                     lamports: result[0].get(3),
-                    owner: result[0].get(2),
+                    owner: Pubkey::new(result[0].get(2)),
                     executable: result[0].get(4),
                     rent_epoch: result[0].get(5),
                     data: result[0].get(6),
@@ -362,7 +377,7 @@ impl SimplePostgresClient {
         &mut self,
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
-    ) -> Result<DbAccountInfo, PostgresRpcServerError> {
+    ) -> Result<AccountInfo, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let commitment_level = get_commitment_level_str(commitment_level);
 
@@ -388,10 +403,10 @@ impl SimplePostgresClient {
                     );
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
-                1 => Ok(DbAccountInfo {
+                1 => Ok(AccountInfo {
                     pubkey: Pubkey::new(result[0].get(0)),
                     lamports: result[0].get(3),
-                    owner: result[0].get(2),
+                    owner: Pubkey::new(result[0].get(2)),
                     executable: result[0].get(4),
                     rent_epoch: result[0].get(5),
                     data: result[0].get(6),
@@ -417,7 +432,7 @@ impl SimplePostgresClient {
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
         slot: i64,
-    ) -> Result<DbAccountInfo, PostgresRpcServerError> {
+    ) -> Result<AccountInfo, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let commitment_level = get_commitment_level_str(commitment_level);
 
@@ -443,10 +458,10 @@ impl SimplePostgresClient {
                     );
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
-                1 => Ok(DbAccountInfo {
+                1 => Ok(AccountInfo {
                     pubkey: Pubkey::new(result[0].get(0)),
                     lamports: result[0].get(3),
-                    owner: result[0].get(2),
+                    owner: Pubkey::new(result[0].get(2)),
                     executable: result[0].get(4),
                     rent_epoch: result[0].get(5),
                     data: result[0].get(6),
@@ -467,7 +482,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_owner(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_owner_stmt;
         let client = &mut client.client;
@@ -479,7 +494,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_spl_token_owner(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_owner_stmt;
         let client = &mut client.client;
@@ -491,7 +506,7 @@ impl SimplePostgresClient {
     pub async fn get_accounts_by_spl_token_mint(
         &mut self,
         owner: &Pubkey,
-    ) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+    ) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_mint_stmt;
         let client = &mut client.client;
@@ -528,7 +543,7 @@ impl SimplePostgresClient {
 fn load_account_results(
     result: Result<Vec<postgres::Row>, postgres::Error>,
     owner: &Pubkey,
-) -> Result<Vec<DbAccountInfo>, PostgresRpcServerError> {
+) -> Result<Vec<AccountInfo>, PostgresRpcServerError> {
     match result {
         Err(error) => {
             let msg = format!(
@@ -540,10 +555,10 @@ fn load_account_results(
         Ok(result) => {
             let results = result
                 .into_iter()
-                .map(|row| DbAccountInfo {
+                .map(|row| AccountInfo {
                     pubkey: Pubkey::new(row.get(0)),
                     lamports: row.get(3),
-                    owner: row.get(2),
+                    owner: Pubkey::new(row.get(2)),
                     executable: row.get(4),
                     rent_epoch: row.get(5),
                     data: row.get(6),

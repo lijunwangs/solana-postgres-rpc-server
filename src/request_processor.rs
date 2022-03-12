@@ -1,6 +1,6 @@
 use solana_sdk::commitment_config::CommitmentLevel;
 
-use crate::postgres_client::{DbAccountInfo, DbSlotInfo};
+use crate::postgres_client::{AccountInfo, DbSlotInfo};
 
 use {
     crate::{
@@ -208,7 +208,7 @@ fn get_spl_token_mint_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> 
 fn filter_accounts(
     config: Option<RpcAccountInfoConfig>,
     mut filters: Vec<RpcFilterType>,
-    accounts: Vec<crate::postgres_client::DbAccountInfo>,
+    accounts: Vec<crate::postgres_client::AccountInfo>,
     program_id: &Pubkey,
 ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
     let mut keyed_accounts = Vec::new();
@@ -272,7 +272,7 @@ pub async fn get_mint_owner_and_decimals(
 pub async fn get_parsed_token_account(
     client: &mut SimplePostgresClient,
     pubkey: &Pubkey,
-    account: DbAccountInfo,
+    account: AccountInfo,
 ) -> Result<(UiAccount, i64)> {
     if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
         let (_, decimals) = get_mint_owner_and_decimals(client, &mint_pubkey).await?;
