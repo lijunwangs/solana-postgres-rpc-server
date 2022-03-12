@@ -1,6 +1,5 @@
 /// The JSON request processor
 /// This takes the request from the client and load the information from the datastore.
-
 use {
     crate::{
         postgres_client::{AccountInfo, DbSlotInfo, ServerResult, SimplePostgresClient},
@@ -29,6 +28,7 @@ use {
     },
     solana_sdk::{
         account::ReadableAccount,
+        clock::Slot,
         commitment_config::{CommitmentConfig, CommitmentLevel},
         program_pack::Pack,
         pubkey::{Pubkey, PUBKEY_BYTES},
@@ -209,13 +209,12 @@ fn get_spl_token_mint_filter(program_id: &Pubkey, filters: &[RpcFilterType]) -> 
 
 /// Apply the filers on the loaded accounts
 fn filter_accounts(
-    config: Option<RpcAccountInfoConfig>,
+    config: RpcAccountInfoConfig,
     mut filters: Vec<RpcFilterType>,
     accounts: Vec<AccountInfo>,
     program_id: &Pubkey,
 ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
     let mut keyed_accounts = Vec::new();
-    let config = config.unwrap_or_default();
     let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
     let data_slice_config = config.data_slice;
     check_slice_and_encoding(&encoding, data_slice_config.is_some())
@@ -397,7 +396,10 @@ async fn load_account_result(
             }
         }
         Err(err) => {
-            info!("Got error when loading from the database {} for account {}", err, pubkey);
+            info!(
+                "Got error when loading from the database {} for account {}",
+                err, pubkey
+            );
             match err {
                 PostgresRpcServerError::ObjectNotFound { msg: _ } => Ok(None),
                 _ => Err(Error::internal_error()),
@@ -416,6 +418,11 @@ impl From<PostgresRpcServerError> for Error {
             _ => Error::internal_error(),
         }
     }
+}
+
+fn new_response<T>(slot: i64, value: T) -> RpcResponse<T> {
+    let context = RpcResponseContext { slot: slot as Slot };
+    Response { context, value }
 }
 
 impl JsonRpcRequestProcessor {
@@ -524,7 +531,8 @@ impl JsonRpcRequestProcessor {
     async fn get_filtered_spl_token_accounts_by_owner(
         &self,
         client: &mut SimplePostgresClient,
-        config: Option<RpcAccountInfoConfig>,
+        config: RpcAccountInfoConfig,
+        slot: i64,
         program_id: &Pubkey,
         owner_key: &Pubkey,
         mut filters: Vec<RpcFilterType>,
@@ -539,7 +547,9 @@ impl JsonRpcRequestProcessor {
             encoding: None,
         }));
 
-        let accounts = client.get_accounts_by_spl_token_owner(owner_key).await?;
+        let accounts = client
+            .get_accounts_by_spl_token_owner(slot, owner_key)
+            .await?;
 
         filter_accounts(config, filters, accounts, program_id)
     }
@@ -548,7 +558,8 @@ impl JsonRpcRequestProcessor {
     async fn get_filtered_spl_token_accounts_by_mint(
         &self,
         client: &mut SimplePostgresClient,
-        config: Option<RpcAccountInfoConfig>,
+        config: RpcAccountInfoConfig,
+        slot: i64,
         program_id: &Pubkey,
         mint_key: &Pubkey,
         mut filters: Vec<RpcFilterType>,
@@ -563,37 +574,42 @@ impl JsonRpcRequestProcessor {
             encoding: None,
         }));
 
-        let accounts = client.get_accounts_by_spl_token_owner(mint_key).await?;
+        let accounts = client
+            .get_accounts_by_spl_token_owner(slot, mint_key)
+            .await?;
         filter_accounts(config, filters, accounts, program_id)
     }
 
     async fn get_filtered_program_accounts(
         &self,
         client: &mut SimplePostgresClient,
+        slot: i64,
         program_id: &Pubkey,
-        config: Option<RpcAccountInfoConfig>,
+        config: RpcAccountInfoConfig,
         filters: Vec<RpcFilterType>,
     ) -> RpcCustomResult<Vec<RpcKeyedAccount>> {
-        let accounts = client.get_accounts_by_owner(program_id).await?;
+        let accounts = client.get_accounts_by_owner(slot, program_id).await?;
         filter_accounts(config, filters, accounts, program_id)
     }
 
-    #[allow(unused_mut)]
     pub async fn get_program_accounts(
         &self,
         program_id: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
-        mut filters: Vec<RpcFilterType>,
+        filters: Vec<RpcFilterType>,
         with_context: bool,
     ) -> Result<OptionalContext<Vec<RpcKeyedAccount>>> {
         info!("get_program_accounts is called... {}", program_id);
         let mut client = self.db_client.lock().await;
+        let config = config.unwrap_or_default();
+        let slot_info = Self::get_slot_with_commitment(&mut client, config.commitment).await?;
 
         let result = {
             if let Some(owner) = get_spl_token_owner_filter(program_id, &filters) {
                 self.get_filtered_spl_token_accounts_by_owner(
                     &mut client,
                     config,
+                    slot_info.slot,
                     program_id,
                     &owner,
                     filters,
@@ -603,17 +619,27 @@ impl JsonRpcRequestProcessor {
                 self.get_filtered_spl_token_accounts_by_mint(
                     &mut client,
                     config,
+                    slot_info.slot,
                     program_id,
                     &mint,
                     filters,
                 )
                 .await?
             } else {
-                self.get_filtered_program_accounts(&mut client, program_id, config, filters)
-                    .await?
+                self.get_filtered_program_accounts(
+                    &mut client,
+                    slot_info.slot,
+                    program_id,
+                    config,
+                    filters,
+                )
+                .await?
             }
         };
 
-        Ok(result).map(OptionalContext::NoContext)
+        Ok(result).map(|result| match with_context {
+            true => OptionalContext::Context(new_response(slot_info.slot, result)),
+            false => OptionalContext::NoContext(result),
+        })
     }
 }

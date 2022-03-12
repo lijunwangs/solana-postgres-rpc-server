@@ -246,7 +246,8 @@ impl SimplePostgresClient {
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
-            WHERE owner = $1";
+            WHERE owner = $1 \
+            slot <= $2";
         prepare_statement(stmt, client, config).await
     }
 
@@ -257,7 +258,8 @@ impl SimplePostgresClient {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.owner_key \
-            WHERE owner_idx.owner_key = $1";
+            WHERE owner_idx.owner_key = $1
+            AND owner_idx.slot <= $2";
         prepare_statement(stmt, client, config).await
     }
 
@@ -268,7 +270,8 @@ impl SimplePostgresClient {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.mint_key \
-            WHERE owner_idx.mint_key = $1";
+            WHERE owner_idx.mint_key = $1
+            AND owner_idx.slot <= $2";
         prepare_statement(stmt, client, config).await
     }
 
@@ -489,37 +492,40 @@ impl SimplePostgresClient {
 
     pub async fn get_accounts_by_owner(
         &mut self,
+        slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_owner_stmt;
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
-        let result = client.query(statement, &[&pubkey_v]).await;
+        let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_owner(
         &mut self,
+        slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_owner_stmt;
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
-        let result = client.query(statement, &[&pubkey_v]).await;
+        let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
     }
 
     pub async fn get_accounts_by_spl_token_mint(
         &mut self,
+        slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.get_mut().unwrap();
         let statement = &client.get_accounts_by_token_mint_stmt;
         let client = &mut client.client;
         let pubkey_v = owner.to_bytes().to_vec();
-        let result = client.query(statement, &[&pubkey_v]).await;
+        let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
     }
 
