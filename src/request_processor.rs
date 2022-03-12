@@ -457,22 +457,17 @@ impl JsonRpcRequestProcessor {
         commitment_config: Option<CommitmentConfig>,
     ) -> Result<DbSlotInfo> {
         let slot_info = match commitment_config {
-            Some(commitment_config) => match commitment_config.commitment {
-                CommitmentLevel::Confirmed => client.get_last_confirmed_slot().await?,
-                CommitmentLevel::Finalized => client.get_last_finalized_slot().await?,
-                CommitmentLevel::Processed => client.get_last_processed_slot().await?,
-                _ => {
-                    return Err(Error::invalid_params(
-                        format!(
-                            "Invalid commitment level, supported are ({} {} {})",
-                            CommitmentLevel::Processed,
-                            CommitmentLevel::Confirmed,
-                            CommitmentLevel::Finalized
-                        )
-                        .to_string(),
-                    ));
+            Some(commitment_config) => {
+                validate_commitment_level(commitment_config.commitment)?;
+                match commitment_config.commitment {
+                    CommitmentLevel::Confirmed => client.get_last_confirmed_slot().await?,
+                    CommitmentLevel::Finalized => client.get_last_finalized_slot().await?,
+                    CommitmentLevel::Processed => client.get_last_processed_slot().await?,
+                    _ => {
+                        panic!("Do not expect to be here!");
+                    }
                 }
-            },
+            }
             None => client.get_last_processed_slot().await?,
         };
 
