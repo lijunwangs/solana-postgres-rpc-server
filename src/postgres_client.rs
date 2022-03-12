@@ -458,16 +458,20 @@ impl SimplePostgresClient {
                     );
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
-                1 => Ok(AccountInfo {
-                    pubkey: Pubkey::new(result[0].get(0)),
-                    lamports: result[0].get(3),
-                    owner: Pubkey::new(result[0].get(2)),
-                    executable: result[0].get(4),
-                    rent_epoch: result[0].get(5),
-                    data: result[0].get(6),
-                    slot: result[0].get(1),
-                    write_version: result[0].get(7),
-                }),
+                1 => {
+                    let account: DbAccountInfo = result[0].get(0);
+
+                    Ok(AccountInfo {
+                        pubkey: Pubkey::new(&account.pubkey),
+                        lamports: account.lamports,
+                        owner: Pubkey::new(&account.owner),
+                        executable: account.executable,
+                        rent_epoch: account.rent_epoch,
+                        data: account.data.clone(),
+                        slot: account.slot,
+                        write_version: account.write_version,
+                    })
+                },
                 cnt => {
                     let msg = format!(
                         "Found more than 1 accounts with the key {} count: {} from the database.",
