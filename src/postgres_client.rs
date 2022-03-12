@@ -462,6 +462,7 @@ impl SimplePostgresClient {
                 }
                 1 => {
                     let account: DbAccountInfo = result[0].get(0);
+                    info!("Loaded account {:?}", account);
 
                     Ok(AccountInfo {
                         pubkey: Pubkey::new(&account.pubkey),
