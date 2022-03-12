@@ -76,7 +76,6 @@ pub fn redirect_stderr_to_file(logfile: Option<String>) -> Option<JoinHandle<()>
     }
 }
 
-#[allow(unused_variables)]
 #[tokio::main]
 pub async fn main() {
     let default_rpc_max_multiple_accounts = &MAX_MULTIPLE_ACCOUNTS.to_string();

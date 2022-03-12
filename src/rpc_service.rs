@@ -37,14 +37,6 @@ impl RpcRequestMiddleware {
     fn new() -> Self {
         Self {}
     }
-
-    #[allow(dead_code)]
-    fn internal_server_error() -> hyper::Response<hyper::Body> {
-        hyper::Response::builder()
-            .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
-            .body(hyper::Body::empty())
-            .unwrap()
-    }
 }
 
 impl RequestMiddleware for RpcRequestMiddleware {
@@ -54,7 +46,6 @@ impl RequestMiddleware for RpcRequestMiddleware {
     }
 }
 
-#[allow(unused_variables)]
 impl JsonRpcService {
     pub fn new(
         rpc_addr: SocketAddr,
