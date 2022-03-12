@@ -247,7 +247,7 @@ impl SimplePostgresClient {
     ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE owner = $1 \
-            slot <= $2";
+            AND slot <= $2";
         prepare_statement(stmt, client, config).await
     }
 
