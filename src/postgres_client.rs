@@ -7,9 +7,7 @@ use {
     },
     chrono::naive::NaiveDateTime,
     log::*,
-    solana_sdk::{
-        commitment_config::CommitmentLevel,
-    },
+    solana_sdk::commitment_config::CommitmentLevel,
     std::sync::Mutex,
     tokio_postgres::{
         tls::{NoTls, NoTlsStream},
@@ -92,8 +90,6 @@ impl SimplePostgresClient {
         }
     }
 
-
-
     /// This get the latest slot from slot table at `processed` commitment level.
     async fn build_get_processed_slot_stmt(
         client: &mut Client,
@@ -122,8 +118,6 @@ impl SimplePostgresClient {
             (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'rooted')";
         prepare_statement(stmt, client, config).await
     }
-
-
 
     pub async fn new(config: &PostgresRpcServerConfig) -> ServerResult<Self> {
         info!("Creating SimplePostgresClient...");

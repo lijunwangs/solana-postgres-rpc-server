@@ -1,6 +1,8 @@
 use {
     crate::{
-        postgres_client::{get_commitment_level_str, prepare_statement, ServerResult, SimplePostgresClient},
+        postgres_client::{
+            get_commitment_level_str, prepare_statement, ServerResult, SimplePostgresClient,
+        },
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
@@ -8,11 +10,8 @@ use {
     log::*,
     solana_sdk::{
         account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey,
-    },    
-    tokio_postgres::{
-        types::FromSql,
-        Client, Statement,
     },
+    tokio_postgres::{types::FromSql, Client, Statement},
 };
 
 impl Eq for AccountInfo {}
@@ -42,7 +41,6 @@ pub struct AccountInfo {
     pub data: Vec<u8>,
     pub write_version: i64,
 }
-
 
 impl ReadableAccount for AccountInfo {
     fn lamports(&self) -> u64 {
@@ -98,7 +96,6 @@ fn load_account_results(
 }
 
 impl SimplePostgresClient {
-
     /// This get the latest account from account table.
     pub async fn build_get_account_stmt(
         client: &mut Client,

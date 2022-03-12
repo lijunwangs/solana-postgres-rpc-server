@@ -2,7 +2,9 @@
 /// This takes the request from the client and load the information from the datastore.
 use {
     crate::{
-        postgres_client::{postgres_client_account::AccountInfo, DbSlotInfo, ServerResult, SimplePostgresClient},
+        postgres_client::{
+            postgres_client_account::AccountInfo, DbSlotInfo, ServerResult, SimplePostgresClient,
+        },
         postgres_rpc_server_error::PostgresRpcServerError,
         rpc::OptionalContext,
         rpc_service::JsonRpcConfig,
