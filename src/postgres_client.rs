@@ -457,6 +457,7 @@ impl SimplePostgresClient {
                         "The account with key {} is not found from the database.",
                         pubkey
                     );
+                    error!("{}", msg);
                     Err(PostgresRpcServerError::ObjectNotFound { msg })
                 }
                 1 => {
