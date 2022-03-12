@@ -20,7 +20,6 @@ const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
 impl Eq for AccountInfo {}
 
-
 #[derive(Clone, PartialEq, FromSql, Debug)]
 #[postgres(name = "account")]
 pub struct DbAccountInfo {
@@ -474,7 +473,7 @@ impl SimplePostgresClient {
                         slot: account.slot,
                         write_version: account.write_version,
                     })
-                },
+                }
                 cnt => {
                     let msg = format!(
                         "Found more than 1 accounts with the key {} count: {} from the database.",

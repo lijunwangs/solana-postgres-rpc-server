@@ -344,14 +344,10 @@ async fn get_encoded_account_at_slot(
     commitment: Option<CommitmentConfig>,
     slot: i64,
 ) -> Result<Option<(UiAccount, i64)>> {
-    let result = if let Some(commitment) = commitment {
-        if !(commitment.commitment == CommitmentLevel::Confirmed
-            || commitment.commitment == CommitmentLevel::Finalized
-            || commitment.commitment == CommitmentLevel::Processed)
-        {
-            info!("Invalid commitment level: {}", commitment.commitment);
-            return Err(Error::invalid_request());
-        }
+    let commitment = commitment.unwrap_or_default();
+    let result = if commitment.commitment == CommitmentLevel::Confirmed
+        || commitment.commitment == CommitmentLevel::Finalized
+    {
         client
             .get_account_with_commitment_and_slot(pubkey, commitment.commitment, slot)
             .await
