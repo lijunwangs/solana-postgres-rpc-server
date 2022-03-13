@@ -3,7 +3,8 @@
 use {
     crate::{
         postgres_client::{
-            postgres_client_account::AccountInfo, DbSlotInfo, ServerResult, SimplePostgresClient,
+            postgres_client_account::AccountInfo, postgres_client_slot::DbSlotInfo, ServerResult,
+            SimplePostgresClient,
         },
         postgres_rpc_server_error::PostgresRpcServerError,
         rpc::OptionalContext,

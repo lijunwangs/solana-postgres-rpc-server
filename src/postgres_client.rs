@@ -1,4 +1,5 @@
 pub mod postgres_client_account;
+pub mod postgres_client_slot;
 
 use {
     crate::{
@@ -90,35 +91,6 @@ impl SimplePostgresClient {
         }
     }
 
-    /// This get the latest slot from slot table at `processed` commitment level.
-    async fn build_get_processed_slot_stmt(
-        client: &mut Client,
-        config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
-        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN (SELECT max(s2.slot) FROM slot AS s2)";
-        prepare_statement(stmt, client, config).await
-    }
-
-    /// This get the latest slot from slot table at `confirmed` commitment level.
-    async fn build_get_confirmed_slot_stmt(
-        client: &mut Client,
-        config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
-        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'rooted'))";
-        prepare_statement(stmt, client, config).await
-    }
-
-    /// This get the latest slot from slot table at `finalized` commitment level.
-    async fn build_get_finalized_slot_stmt(
-        client: &mut Client,
-        config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
-        let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
-            (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'rooted')";
-        prepare_statement(stmt, client, config).await
-    }
-
     pub async fn new(config: &PostgresRpcServerConfig) -> ServerResult<Self> {
         info!("Creating SimplePostgresClient...");
         let (mut client, connection) = Self::connect_to_db(config).await?;
@@ -171,78 +143,6 @@ impl SimplePostgresClient {
                 get_account_with_commitment_and_slot_stmt,
             }),
         })
-    }
-
-    pub async fn get_last_processed_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
-        let statement = &client.get_processed_slot_stmt;
-        let client = &mut client.client;
-        let result = client.query(statement, &[]).await;
-        load_single_slot(result)
-    }
-
-    pub async fn get_last_confirmed_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
-        let statement = &client.get_confirmed_slot_stmt;
-        let client = &mut client.client;
-        let result = client.query(statement, &[]).await;
-        load_single_slot(result)
-    }
-
-    pub async fn get_last_finalized_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
-        let statement = &client.get_finalized_slot_stmt;
-        let client = &mut client.client;
-        let result = client.query(statement, &[]).await;
-        load_single_slot(result)
-    }
-}
-
-/// Load a single slot record
-fn load_single_slot(
-    result: Result<Vec<postgres::Row>, postgres::Error>,
-) -> ServerResult<DbSlotInfo> {
-    let mut slots = load_slot_results(result)?;
-    match slots.len() {
-        0 => {
-            let msg = "The slot is not found from the database.".to_string();
-            Err(PostgresRpcServerError::ObjectNotFound { msg })
-        }
-        1 => Ok(slots.remove(0)),
-        cnt => {
-            let msg = format!(
-                "Found more than 1 slots while expecting one, count: {} from the database.",
-                cnt
-            );
-            Err(PostgresRpcServerError::MoreThanOneObjectFound { msg })
-        }
-    }
-}
-
-/// Load a list of DbSlotInfo from a query result.
-fn load_slot_results(
-    result: Result<Vec<postgres::Row>, postgres::Error>,
-) -> ServerResult<Vec<DbSlotInfo>> {
-    match result {
-        Err(error) => {
-            let msg = format!(
-                "Failed load the slots from the database. Error: ({:?})",
-                error
-            );
-            Err(PostgresRpcServerError::DatabaseQueryError { msg })
-        }
-        Ok(result) => {
-            let results = result
-                .into_iter()
-                .map(|row| DbSlotInfo {
-                    slot: row.get(0),
-                    parent: row.get(1),
-                    status: row.get(2),
-                    updated_on: row.get(3),
-                })
-                .collect();
-            Ok(results)
-        }
     }
 }
 
