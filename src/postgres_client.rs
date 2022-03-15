@@ -110,14 +110,11 @@ impl SimplePostgresClient {
         let get_accounts_by_token_mint_stmt =
             Self::build_get_accounts_by_spl_token_mint_stmt(&client, config).await?;
 
-        let get_processed_slot_stmt =
-            Self::build_get_processed_slot_stmt(&client, config).await?;
+        let get_processed_slot_stmt = Self::build_get_processed_slot_stmt(&client, config).await?;
 
-        let get_confirmed_slot_stmt =
-            Self::build_get_confirmed_slot_stmt(&client, config).await?;
+        let get_confirmed_slot_stmt = Self::build_get_confirmed_slot_stmt(&client, config).await?;
 
-        let get_finalized_slot_stmt =
-            Self::build_get_finalized_slot_stmt(&client, config).await?;
+        let get_finalized_slot_stmt = Self::build_get_finalized_slot_stmt(&client, config).await?;
 
         let get_account_with_commitment_and_slot_stmt =
             Self::build_get_account_with_commitment_and_slot_stmt(&client, config).await?;

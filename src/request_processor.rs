@@ -10,7 +10,7 @@ use {
         rpc::OptionalContext,
         rpc_service::JsonRpcConfig,
     },
-    jsonrpc_core::{futures::lock::Mutex, types::error, types::Error, Metadata, Result},
+    jsonrpc_core::{/*futures::lock::Mutex,*/ types::error, types::Error, Metadata, Result},
     log::*,
     solana_account_decoder::{
         parse_account_data::AccountAdditionalData,
@@ -38,6 +38,7 @@ use {
     },
     spl_token::state::{Account as TokenAccount, Mint},
     std::sync::Arc,
+    tokio::sync::RwLock,
 };
 
 type RpcCustomResult<T> = std::result::Result<T, RpcCustomError>;
@@ -45,7 +46,7 @@ type RpcCustomResult<T> = std::result::Result<T, RpcCustomError>;
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
     pub config: JsonRpcConfig,
-    pub db_client: Arc<Mutex<SimplePostgresClient>>,
+    pub db_client: Arc<RwLock<SimplePostgresClient>>,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
@@ -251,7 +252,7 @@ fn get_mint_decimals(data: &[u8]) -> Result<u8> {
 /// Analyze a mint Pubkey that may be the native_mint and get the mint-account owner (token
 /// program_id) and decimals
 pub async fn get_mint_owner_and_decimals(
-    client: &mut SimplePostgresClient,
+    client: &SimplePostgresClient,
     mint: &Pubkey,
 ) -> Result<(Pubkey, u8)> {
     if mint == &spl_token_native_mint() {
@@ -276,7 +277,7 @@ pub async fn get_mint_owner_and_decimals(
 
 /// Load additional information about the token account specified by `account`.
 async fn get_parsed_token_account(
-    client: &mut SimplePostgresClient,
+    client: &SimplePostgresClient,
     account: AccountInfo,
 ) -> Result<(UiAccount, i64)> {
     if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
@@ -321,7 +322,7 @@ fn validate_commitment_level(commitment_level: CommitmentLevel) -> Result<()> {
 }
 
 async fn get_encoded_account(
-    client: &mut SimplePostgresClient,
+    client: &SimplePostgresClient,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
@@ -357,7 +358,7 @@ async fn get_encoded_account(
 
 /// Get an account with slot <= max_slot and the specified commitment and encode it.
 async fn get_encoded_account_at_slot(
-    client: &mut SimplePostgresClient,
+    client: &SimplePostgresClient,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
@@ -379,7 +380,7 @@ async fn get_encoded_account_at_slot(
 async fn load_account_result(
     result: ServerResult<AccountInfo>,
     encoding: UiAccountEncoding,
-    client: &mut SimplePostgresClient,
+    client: &SimplePostgresClient,
     pubkey: &Pubkey,
     data_slice_config: Option<UiDataSliceConfig>,
 ) -> Result<Option<(UiAccount, i64)>> {
@@ -432,7 +433,7 @@ impl JsonRpcRequestProcessor {
     pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
         Self {
             config,
-            db_client: Arc::new(Mutex::new(db_client)),
+            db_client: Arc::new(RwLock::new(db_client)),
         }
     }
 
@@ -448,11 +449,10 @@ impl JsonRpcRequestProcessor {
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
         let data_slice_config = config.data_slice;
-        let mut client = self.db_client.lock().await;
+        let client = self.db_client.read().await;
         let commitment = config.commitment;
         let account =
-            get_encoded_account(&mut client, pubkey, encoding, data_slice_config, commitment)
-                .await?;
+            get_encoded_account(&client, pubkey, encoding, data_slice_config, commitment).await?;
 
         let slot = if let Some(account) = &account {
             account.1 as u64
@@ -468,7 +468,7 @@ impl JsonRpcRequestProcessor {
 
     /// Get the slot with specified commitment level
     async fn get_slot_with_commitment(
-        client: &mut SimplePostgresClient,
+        client: &SimplePostgresClient,
         commitment_config: Option<CommitmentConfig>,
     ) -> Result<DbSlotInfo> {
         let slot_info = match commitment_config {
@@ -500,15 +500,15 @@ impl JsonRpcRequestProcessor {
         let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
-        let mut client = self.db_client.lock().await;
-        let slot_info = Self::get_slot_with_commitment(&mut client, config.commitment).await?;
+        let client = self.db_client.read().await;
+        let slot_info = Self::get_slot_with_commitment(&client, config.commitment).await?;
 
         let mut accounts = Vec::new();
 
         let commitment = config.commitment;
         for pubkey in pubkeys {
             let account = get_encoded_account_at_slot(
-                &mut client,
+                &client,
                 &pubkey,
                 encoding,
                 config.data_slice,
@@ -533,7 +533,7 @@ impl JsonRpcRequestProcessor {
     /// Get an iterator of spl-token accounts by owner address
     async fn get_filtered_spl_token_accounts_by_owner(
         &self,
-        client: &mut SimplePostgresClient,
+        client: &SimplePostgresClient,
         config: RpcAccountInfoConfig,
         slot: i64,
         program_id: &Pubkey,
@@ -560,7 +560,7 @@ impl JsonRpcRequestProcessor {
     /// Get an iterator of spl-token accounts by mint address
     async fn get_filtered_spl_token_accounts_by_mint(
         &self,
-        client: &mut SimplePostgresClient,
+        client: &SimplePostgresClient,
         config: RpcAccountInfoConfig,
         slot: i64,
         program_id: &Pubkey,
@@ -585,7 +585,7 @@ impl JsonRpcRequestProcessor {
 
     async fn get_filtered_program_accounts(
         &self,
-        client: &mut SimplePostgresClient,
+        client: &SimplePostgresClient,
         slot: i64,
         program_id: &Pubkey,
         config: RpcAccountInfoConfig,
@@ -603,14 +603,14 @@ impl JsonRpcRequestProcessor {
         with_context: bool,
     ) -> Result<OptionalContext<Vec<RpcKeyedAccount>>> {
         info!("get_program_accounts is called... {}", program_id);
-        let mut client = self.db_client.lock().await;
+        let mut client = self.db_client.read().await;
         let config = config.unwrap_or_default();
         let slot_info = Self::get_slot_with_commitment(&mut client, config.commitment).await?;
 
         let result = {
             if let Some(owner) = get_spl_token_owner_filter(program_id, &filters) {
                 self.get_filtered_spl_token_accounts_by_owner(
-                    &mut client,
+                    &client,
                     config,
                     slot_info.slot,
                     program_id,
@@ -620,7 +620,7 @@ impl JsonRpcRequestProcessor {
                 .await?
             } else if let Some(mint) = get_spl_token_mint_filter(program_id, &filters) {
                 self.get_filtered_spl_token_accounts_by_mint(
-                    &mut client,
+                    &client,
                     config,
                     slot_info.slot,
                     program_id,
@@ -630,7 +630,7 @@ impl JsonRpcRequestProcessor {
                 .await?
             } else {
                 self.get_filtered_program_accounts(
-                    &mut client,
+                    &client,
                     slot_info.slot,
                     program_id,
                     config,

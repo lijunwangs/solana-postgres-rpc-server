@@ -350,7 +350,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_account_with_commitment(
-        &mut self,
+        &self,
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
     ) -> ServerResult<AccountInfo> {
