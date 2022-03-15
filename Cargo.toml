@@ -12,6 +12,8 @@ default-run = "solana-postgres-rpc-server"
 
 [dependencies]
 base64 = "0.12.3"
+bb8 = "0.7.1"
+bb8-postgres = { version = "0.7.0" }
 bs58 = "0.4.0"
 clap = "2.33.1"
 chrono = { version = "0.4.11", features = ["serde"] }

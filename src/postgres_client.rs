@@ -6,14 +6,13 @@ use {
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
+    bb8::{Pool, RunError},
+    bb8_postgres::PostgresConnectionManager,
     log::*,
     solana_sdk::commitment_config::CommitmentLevel,
-    // std::sync::{Mutex, RwLock},
+    std::error,
     tokio::sync::RwLock,
-    tokio_postgres::{
-        tls::{NoTls, NoTlsStream},
-        Client, Connection, Socket, Statement,
-    },
+    tokio_postgres::{tls::NoTls, Client, Statement},
 };
 
 /// A Result type.
@@ -22,7 +21,7 @@ pub type ServerResult<T> = std::result::Result<T, PostgresRpcServerError>;
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
 struct PostgresSqlClientWrapper {
-    client: Client,
+    client: Pool<PostgresConnectionManager<NoTls>>,
     get_account_stmt: Statement,
     get_account_with_commitment_stmt: Statement,
     get_accounts_by_owner_stmt: Statement,
@@ -47,10 +46,28 @@ fn get_commitment_level_str(commitment: CommitmentLevel) -> &'static str {
     }
 }
 
+impl<E> From<RunError<E>> for PostgresRpcServerError
+where
+    E: error::Error + 'static,
+{
+    fn from(err: RunError<E>) -> Self {
+        match err {
+            RunError::User(ref err) => {
+                let msg = format!("Error in communicating to the database: {}", err);
+                PostgresRpcServerError::DataStoreConnectionError { msg }
+            }
+            RunError::TimedOut => {
+                let msg = "Timed out in communicating to the database".to_string();
+                PostgresRpcServerError::DataStoreConnectionError { msg }
+            }
+        }
+    }
+}
+
 impl SimplePostgresClient {
     pub async fn connect_to_db(
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<(Client, Connection<Socket, NoTlsStream>)> {
+    ) -> ServerResult<Pool<PostgresConnectionManager<NoTls>>> {
         let port = config.port.unwrap_or(DEFAULT_POSTGRES_PORT);
 
         let connection_str = if let Some(connection_str) = &config.connection_str {
@@ -71,10 +88,11 @@ impl SimplePostgresClient {
             )
         };
 
-        let result = tokio_postgres::connect(&connection_str, NoTls).await;
+        let connection_mgr =
+            PostgresConnectionManager::new_from_stringlike(&connection_str, NoTls).unwrap();
 
-        match result {
-            Ok(result) => Ok(result),
+        match Pool::builder().build(connection_mgr).await {
+            Ok(pool) => Ok(pool),
             Err(err) => {
                 let msg = format!(
                     "Error in connecting database \"connection_str\": {:?}, or \"host\": {:?} \"user\": {:?}: {}",
@@ -87,15 +105,10 @@ impl SimplePostgresClient {
 
     pub async fn new(config: &PostgresRpcServerConfig) -> ServerResult<Self> {
         info!("Creating SimplePostgresClient...");
-        let (client, connection) = Self::connect_to_db(config).await?;
+        let pool = Self::connect_to_db(config).await?;
 
-        // The connection object performs the actual communication with the database,
-        // so spawn it off to run on its own.
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                error!("connection error: {}", e);
-            }
-        });
+        let clone = pool.clone();
+        let client = pool.get().await?;
 
         let get_account_stmt = Self::build_get_account_stmt(&client, config).await?;
         let get_account_with_commitment_stmt =
@@ -122,7 +135,7 @@ impl SimplePostgresClient {
         info!("Created SimplePostgresClient.");
         Ok(Self {
             client: RwLock::new(PostgresSqlClientWrapper {
-                client,
+                client: clone,
                 get_account_stmt,
                 get_account_with_commitment_stmt,
                 get_accounts_by_owner_stmt,

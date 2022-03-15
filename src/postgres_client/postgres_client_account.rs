@@ -213,7 +213,7 @@ impl SimplePostgresClient {
         let commitment_level = get_commitment_level_str(commitment_level);
 
         let statement = &client.get_account_with_commitment_and_slot_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client
             .query(statement, &[&pubkey_v, &commitment_level, &slot])
@@ -270,7 +270,7 @@ impl SimplePostgresClient {
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.read().await;
         let statement = &client.get_accounts_by_owner_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -283,7 +283,7 @@ impl SimplePostgresClient {
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.read().await;
         let statement = &client.get_accounts_by_token_owner_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -296,7 +296,7 @@ impl SimplePostgresClient {
     ) -> ServerResult<Vec<AccountInfo>> {
         let client = self.client.read().await;
         let statement = &client.get_accounts_by_token_mint_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -306,7 +306,7 @@ impl SimplePostgresClient {
     pub async fn get_account(&self, pubkey: &Pubkey) -> ServerResult<AccountInfo> {
         let client = self.client.read().await;
         let statement = &client.get_account_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
         match result {
@@ -358,7 +358,7 @@ impl SimplePostgresClient {
         let commitment_level = get_commitment_level_str(commitment_level);
 
         let statement = &client.get_account_with_commitment_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client
             .query(statement, &[&pubkey_v, &commitment_level])

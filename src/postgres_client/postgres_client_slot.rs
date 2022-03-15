@@ -97,7 +97,7 @@ impl SimplePostgresClient {
         let client = self.client.read().await;
 
         let statement = &client.get_processed_slot_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
 
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
@@ -106,7 +106,7 @@ impl SimplePostgresClient {
     pub async fn get_last_confirmed_slot(&self) -> ServerResult<DbSlotInfo> {
         let client = self.client.read().await;
         let statement = &client.get_confirmed_slot_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
@@ -114,7 +114,7 @@ impl SimplePostgresClient {
     pub async fn get_last_finalized_slot(&self) -> ServerResult<DbSlotInfo> {
         let client = self.client.read().await;
         let statement = &client.get_finalized_slot_stmt;
-        let client = &client.client;
+        let client = &client.client.get().await?;
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
