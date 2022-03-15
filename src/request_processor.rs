@@ -497,12 +497,14 @@ impl JsonRpcRequestProcessor {
         pubkeys: Vec<Pubkey>,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Vec<Option<UiAccount>>>> {
-        info!("getting account_info is called for {:?}", pubkeys);
+        info!("getting get_multiple_accounts is called for {:?}", pubkeys);
         let config = config.unwrap_or_default();
         let encoding = config.encoding.unwrap_or(UiAccountEncoding::Binary);
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
+        info!("zzzzz acquiring lock shared in get_multiple_accounts");
         let client = self.db_client.read().await;
+        info!("zzzzz acquired lock shared in get_multiple_accounts");
         let slot_info = Self::get_slot_with_commitment(&client, config.commitment).await?;
 
         let mut accounts = Vec::new();
