@@ -101,7 +101,10 @@ impl SimplePostgresClient {
 
         let statement = &client.get_processed_slot_stmt;
         let client = &client.client;
+
+        info!("zzzzz Executing query...?");
         let result = client.query(statement, &[]).await;
+        info!("zzzzz Got results...?");
         load_single_slot(result)
     }
 
