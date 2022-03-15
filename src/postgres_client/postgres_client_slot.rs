@@ -66,7 +66,7 @@ fn load_slot_results(
 impl SimplePostgresClient {
     /// This get the latest slot from slot table at `processed` commitment level.
     pub async fn build_get_processed_slot_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN (SELECT max(s2.slot) FROM slot AS s2)";
@@ -75,7 +75,7 @@ impl SimplePostgresClient {
 
     /// This get the latest slot from slot table at `confirmed` commitment level.
     pub async fn build_get_confirmed_slot_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
@@ -85,7 +85,7 @@ impl SimplePostgresClient {
 
     /// This get the latest slot from slot table at `finalized` commitment level.
     pub async fn build_get_finalized_slot_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
@@ -93,7 +93,7 @@ impl SimplePostgresClient {
         prepare_statement(stmt, client, config).await
     }
 
-    pub async fn get_last_processed_slot(&mut self) -> ServerResult<DbSlotInfo> {
+    pub async fn get_last_processed_slot(&self) -> ServerResult<DbSlotInfo> {
         let client = self.client.read().await;
         let statement = &client.get_processed_slot_stmt;
         let client = &client.client;
@@ -101,7 +101,7 @@ impl SimplePostgresClient {
         load_single_slot(result)
     }
 
-    pub async fn get_last_confirmed_slot(&mut self) -> ServerResult<DbSlotInfo> {
+    pub async fn get_last_confirmed_slot(&self) -> ServerResult<DbSlotInfo> {
         let client = self.client.read().await;
         let statement = &client.get_confirmed_slot_stmt;
         let client = &client.client;
@@ -109,7 +109,7 @@ impl SimplePostgresClient {
         load_single_slot(result)
     }
 
-    pub async fn get_last_finalized_slot(&mut self) -> ServerResult<DbSlotInfo> {
+    pub async fn get_last_finalized_slot(&self) -> ServerResult<DbSlotInfo> {
         let client = self.client.read().await;
         let statement = &client.get_finalized_slot_stmt;
         let client = &client.client;

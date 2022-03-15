@@ -98,7 +98,7 @@ fn load_account_results(
 impl SimplePostgresClient {
     /// This get the latest account from account table.
     pub async fn build_get_account_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
@@ -122,7 +122,7 @@ impl SimplePostgresClient {
 
     /// This get the latest account from account table at certain commitment level.
     pub async fn build_get_account_with_commitment_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT get_account_with_commitment_level($1, $2)";
@@ -145,7 +145,7 @@ impl SimplePostgresClient {
 
     /// This get the latest account from account table at certain commitment level.
     pub async fn build_get_account_with_commitment_and_slot_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT get_account_with_commitment_level_and_slot($1, $2, $3)";
@@ -167,7 +167,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn build_get_accounts_by_owner_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
@@ -177,7 +177,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn build_get_accounts_by_spl_token_owner_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
@@ -189,7 +189,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn build_get_accounts_by_spl_token_mint_stmt(
-        client: &mut Client,
+        client: &Client,
         config: &PostgresRpcServerConfig,
     ) -> ServerResult<Statement> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
@@ -204,7 +204,7 @@ impl SimplePostgresClient {
     /// so that the account is consistent at that slot or an older slot
     /// with the set commitment level.
     pub async fn get_account_with_commitment_and_slot(
-        &mut self,
+        &self,
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
         slot: i64,
@@ -264,7 +264,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_accounts_by_owner(
-        &mut self,
+        &self,
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
@@ -277,7 +277,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_accounts_by_spl_token_owner(
-        &mut self,
+        &self,
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
@@ -290,7 +290,7 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_accounts_by_spl_token_mint(
-        &mut self,
+        &self,
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
@@ -303,7 +303,7 @@ impl SimplePostgresClient {
     }
 
     /// Get the latest account regardless its commitment level
-    pub async fn get_account(&mut self, pubkey: &Pubkey) -> ServerResult<AccountInfo> {
+    pub async fn get_account(&self, pubkey: &Pubkey) -> ServerResult<AccountInfo> {
         let client = self.client.read().await;
         let statement = &client.get_account_stmt;
         let client = &client.client;

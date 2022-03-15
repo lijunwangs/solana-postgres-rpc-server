@@ -87,7 +87,7 @@ impl SimplePostgresClient {
 
     pub async fn new(config: &PostgresRpcServerConfig) -> ServerResult<Self> {
         info!("Creating SimplePostgresClient...");
-        let (mut client, connection) = Self::connect_to_db(config).await?;
+        let (client, connection) = Self::connect_to_db(config).await?;
 
         // The connection object performs the actual communication with the database,
         // so spawn it off to run on its own.
@@ -97,30 +97,30 @@ impl SimplePostgresClient {
             }
         });
 
-        let get_account_stmt = Self::build_get_account_stmt(&mut client, config).await?;
+        let get_account_stmt = Self::build_get_account_stmt(&client, config).await?;
         let get_account_with_commitment_stmt =
-            Self::build_get_account_with_commitment_stmt(&mut client, config).await?;
+            Self::build_get_account_with_commitment_stmt(&client, config).await?;
 
         let get_accounts_by_owner_stmt =
-            Self::build_get_accounts_by_owner_stmt(&mut client, config).await?;
+            Self::build_get_accounts_by_owner_stmt(&client, config).await?;
 
         let get_accounts_by_token_owner_stmt =
-            Self::build_get_accounts_by_spl_token_owner_stmt(&mut client, config).await?;
+            Self::build_get_accounts_by_spl_token_owner_stmt(&client, config).await?;
 
         let get_accounts_by_token_mint_stmt =
-            Self::build_get_accounts_by_spl_token_mint_stmt(&mut client, config).await?;
+            Self::build_get_accounts_by_spl_token_mint_stmt(&client, config).await?;
 
         let get_processed_slot_stmt =
-            Self::build_get_processed_slot_stmt(&mut client, config).await?;
+            Self::build_get_processed_slot_stmt(&client, config).await?;
 
         let get_confirmed_slot_stmt =
-            Self::build_get_confirmed_slot_stmt(&mut client, config).await?;
+            Self::build_get_confirmed_slot_stmt(&client, config).await?;
 
         let get_finalized_slot_stmt =
-            Self::build_get_finalized_slot_stmt(&mut client, config).await?;
+            Self::build_get_finalized_slot_stmt(&client, config).await?;
 
         let get_account_with_commitment_and_slot_stmt =
-            Self::build_get_account_with_commitment_and_slot_stmt(&mut client, config).await?;
+            Self::build_get_account_with_commitment_and_slot_stmt(&client, config).await?;
 
         info!("Created SimplePostgresClient.");
         Ok(Self {
@@ -142,7 +142,7 @@ impl SimplePostgresClient {
 
 async fn prepare_statement(
     stmt: &str,
-    client: &mut Client,
+    client: &Client,
     config: &PostgresRpcServerConfig,
 ) -> ServerResult<Statement> {
     info!("Preparing statement {}", stmt);
