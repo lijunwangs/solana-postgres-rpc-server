@@ -6,10 +6,10 @@ use {
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
-    chrono::naive::NaiveDateTime,
     log::*,
     solana_sdk::commitment_config::CommitmentLevel,
-    std::sync::Mutex,
+    // std::sync::{Mutex, RwLock},
+    tokio::sync::RwLock,
     tokio_postgres::{
         tls::{NoTls, NoTlsStream},
         Client, Connection, Socket, Statement,
@@ -21,12 +21,7 @@ pub type ServerResult<T> = std::result::Result<T, PostgresRpcServerError>;
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
-pub struct DbSlotInfo {
-    pub slot: i64,
-    pub parent: i64,
-    pub status: String,
-    pub updated_on: NaiveDateTime,
-}
+
 struct PostgresSqlClientWrapper {
     client: Client,
     get_account_stmt: Statement,
@@ -41,7 +36,7 @@ struct PostgresSqlClientWrapper {
 }
 
 pub struct SimplePostgresClient {
-    client: Mutex<PostgresSqlClientWrapper>,
+    client: RwLock<PostgresSqlClientWrapper>,
 }
 
 fn get_commitment_level_str(commitment: CommitmentLevel) -> &'static str {
@@ -130,7 +125,7 @@ impl SimplePostgresClient {
 
         info!("Created SimplePostgresClient.");
         Ok(Self {
-            client: Mutex::new(PostgresSqlClientWrapper {
+            client: RwLock::new(PostgresSqlClientWrapper {
                 client,
                 get_account_stmt,
                 get_account_with_commitment_stmt,

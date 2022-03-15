@@ -94,25 +94,25 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_last_processed_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
+        let client = self.client.read().await;
         let statement = &client.get_processed_slot_stmt;
-        let client = &mut client.client;
+        let client = &client.client;
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
 
     pub async fn get_last_confirmed_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
+        let client = self.client.read().await;
         let statement = &client.get_confirmed_slot_stmt;
-        let client = &mut client.client;
+        let client = &client.client;
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
 
     pub async fn get_last_finalized_slot(&mut self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.get_mut().unwrap();
+        let client = self.client.read().await;
         let statement = &client.get_finalized_slot_stmt;
-        let client = &mut client.client;
+        let client = &client.client;
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
