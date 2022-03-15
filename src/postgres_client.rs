@@ -21,7 +21,6 @@ pub type ServerResult<T> = std::result::Result<T, PostgresRpcServerError>;
 
 const DEFAULT_POSTGRES_PORT: u16 = 5432;
 
-
 struct PostgresSqlClientWrapper {
     client: Client,
     get_account_stmt: Statement,
