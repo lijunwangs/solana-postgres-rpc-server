@@ -4,7 +4,6 @@ use {
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
-    log::*,
     chrono::naive::NaiveDateTime,
     tokio_postgres::{Client, Statement},
 };
@@ -95,16 +94,12 @@ impl SimplePostgresClient {
     }
 
     pub async fn get_last_processed_slot(&self) -> ServerResult<DbSlotInfo> {
-        info!("zzzzz taking a lock on the client again in get_last_processed_slot?");
         let client = self.client.read().await;
-        info!("zzzzz taken a lock on the client again in get_last_processed_slot?");
 
         let statement = &client.get_processed_slot_stmt;
         let client = &client.client;
 
-        info!("zzzzz Executing query...?");
         let result = client.query(statement, &[]).await;
-        info!("zzzzz Got results...?");
         load_single_slot(result)
     }
 
