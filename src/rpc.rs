@@ -77,11 +77,11 @@ pub mod rpc_accounts {
 
         fn get_account_info(
             &self,
-            mut meta: Self::Metadata,
+            meta: Self::Metadata,
             pubkey_str: String,
             config: Option<RpcAccountInfoConfig>,
         ) -> BoxFuture<Result<RpcResponse<Option<UiAccount>>>> {
-            debug!("get_account_info rpc request received: {:?}", pubkey_str);
+            info!("get_account_info rpc request received: {:?}", pubkey_str);
             let pubkey = verify_pubkey(&pubkey_str);
             match pubkey {
                 Err(err) => Box::pin(future::err(err)),
@@ -95,7 +95,7 @@ pub mod rpc_accounts {
             pubkey_strs: Vec<String>,
             config: Option<RpcAccountInfoConfig>,
         ) -> BoxFuture<Result<RpcResponse<Vec<Option<UiAccount>>>>> {
-            debug!(
+            info!(
                 "get_multiple_accounts rpc request received: {:?}",
                 pubkey_strs.len()
             );
@@ -131,7 +131,7 @@ pub mod rpc_accounts {
             program_id_str: String,
             config: Option<RpcProgramAccountsConfig>,
         ) -> BoxFuture<Result<OptionalContext<Vec<RpcKeyedAccount>>>> {
-            debug!(
+            info!(
                 "get_program_accounts rpc request received: {:?}",
                 program_id_str
             );

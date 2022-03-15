@@ -10,7 +10,7 @@ use {
         rpc::OptionalContext,
         rpc_service::JsonRpcConfig,
     },
-    jsonrpc_core::{/*futures::lock::Mutex,*/ types::error, types::Error, Metadata, Result},
+    jsonrpc_core::{types::error, types::Error, Metadata, Result},
     log::*,
     solana_account_decoder::{
         parse_account_data::AccountAdditionalData,
@@ -439,7 +439,7 @@ impl JsonRpcRequestProcessor {
 
     /// Get account infor for a single account with the pubkey.
     pub async fn get_account_info(
-        &mut self,
+        &self,
         pubkey: &Pubkey,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>> {
@@ -449,7 +449,9 @@ impl JsonRpcRequestProcessor {
         check_slice_and_encoding(&encoding, config.data_slice.is_some())?;
 
         let data_slice_config = config.data_slice;
+        info!("zzzzz Acquring lock shared");
         let client = self.db_client.read().await;
+        info!("zzzzz Acquired lock shared");
         let commitment = config.commitment;
         let account =
             get_encoded_account(&client, pubkey, encoding, data_slice_config, commitment).await?;
