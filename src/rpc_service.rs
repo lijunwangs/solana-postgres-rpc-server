@@ -1,6 +1,6 @@
 use {
     crate::{
-        postgres_client::SimplePostgresClient,
+        postgres_client::AsyncPooledPostgresClient,
         request_processor::JsonRpcRequestProcessor,
         rpc::{
             rpc_accounts::{self, *},
@@ -50,7 +50,7 @@ impl JsonRpcService {
     pub fn new(
         rpc_addr: SocketAddr,
         config: JsonRpcConfig,
-        db_client: SimplePostgresClient,
+        db_client: AsyncPooledPostgresClient,
     ) -> Self {
         info!("rpc bound to {:?}", rpc_addr);
         let rpc_threads = 1.max(config.rpc_threads);

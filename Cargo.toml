@@ -11,6 +11,7 @@ documentation = "https://docs.rs/solana-postgres-rpc-server"
 default-run = "solana-postgres-rpc-server"
 
 [dependencies]
+async-trait = "0.1"
 base64 = "0.12.3"
 bb8 = "0.7.1"
 bb8-postgres = { version = "0.7.0" }

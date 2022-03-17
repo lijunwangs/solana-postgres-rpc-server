@@ -1,11 +1,12 @@
 use {
     crate::{
-        postgres_client::{prepare_statement, ServerResult, SimplePostgresClient},
+        postgres_client::{prepare_statement, AsyncPooledPostgresClient, PreparedQuery,
+            ServerResult, SimplePostgresClient},
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
     },
     chrono::naive::NaiveDateTime,
-    tokio_postgres::{Client, Statement},
+    tokio_postgres::{error::Error, Client, Statement},
 };
 
 pub struct DbSlotInfo {
@@ -68,7 +69,7 @@ impl SimplePostgresClient {
     pub async fn build_get_processed_slot_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN (SELECT max(s2.slot) FROM slot AS s2)";
         prepare_statement(stmt, client, config).await
     }
@@ -77,7 +78,7 @@ impl SimplePostgresClient {
     pub async fn build_get_confirmed_slot_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
             (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status in ('confirmed', 'rooted'))";
         prepare_statement(stmt, client, config).await
@@ -87,34 +88,32 @@ impl SimplePostgresClient {
     pub async fn build_get_finalized_slot_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT s.* FROM slot s WHERE s.slot IN \
             (SELECT max(s2.slot) FROM slot AS s2 WHERE s2.status = 'rooted')";
         prepare_statement(stmt, client, config).await
     }
+}
+
+impl AsyncPooledPostgresClient {
 
     pub async fn get_last_processed_slot(&self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.read().await;
-
-        let statement = &client.get_processed_slot_stmt;
-        let client = &client.client.get().await?;
-
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetProcessedSlot).unwrap();
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
 
     pub async fn get_last_confirmed_slot(&self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.read().await;
-        let statement = &client.get_confirmed_slot_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetConfirmedSlot).unwrap();
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }
 
     pub async fn get_last_finalized_slot(&self) -> ServerResult<DbSlotInfo> {
-        let client = self.client.read().await;
-        let statement = &client.get_finalized_slot_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetFinalizedSlot).unwrap();
         let result = client.query(statement, &[]).await;
         load_single_slot(result)
     }

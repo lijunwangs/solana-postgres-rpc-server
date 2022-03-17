@@ -4,7 +4,7 @@ use {
     crate::{
         postgres_client::{
             postgres_client_account::AccountInfo, postgres_client_slot::DbSlotInfo, ServerResult,
-            SimplePostgresClient,
+            AsyncPooledPostgresClient,
         },
         postgres_rpc_server_error::PostgresRpcServerError,
         rpc::OptionalContext,
@@ -46,7 +46,7 @@ type RpcCustomResult<T> = std::result::Result<T, RpcCustomError>;
 #[derive(Clone)]
 pub struct JsonRpcRequestProcessor {
     pub config: JsonRpcConfig,
-    pub db_client: Arc<RwLock<SimplePostgresClient>>,
+    pub db_client: Arc<RwLock<AsyncPooledPostgresClient>>,
 }
 
 impl Metadata for JsonRpcRequestProcessor {}
@@ -252,7 +252,7 @@ fn get_mint_decimals(data: &[u8]) -> Result<u8> {
 /// Analyze a mint Pubkey that may be the native_mint and get the mint-account owner (token
 /// program_id) and decimals
 pub async fn get_mint_owner_and_decimals(
-    client: &SimplePostgresClient,
+    client: &AsyncPooledPostgresClient,
     mint: &Pubkey,
 ) -> Result<(Pubkey, u8)> {
     if mint == &spl_token_native_mint() {
@@ -277,7 +277,7 @@ pub async fn get_mint_owner_and_decimals(
 
 /// Load additional information about the token account specified by `account`.
 async fn get_parsed_token_account(
-    client: &SimplePostgresClient,
+    client: &AsyncPooledPostgresClient,
     account: AccountInfo,
 ) -> Result<(UiAccount, i64)> {
     if let Some(mint_pubkey) = get_token_account_mint(account.data()) {
@@ -322,7 +322,7 @@ fn validate_commitment_level(commitment_level: CommitmentLevel) -> Result<()> {
 }
 
 async fn get_encoded_account(
-    client: &SimplePostgresClient,
+    client: &AsyncPooledPostgresClient,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
@@ -358,7 +358,7 @@ async fn get_encoded_account(
 
 /// Get an account with slot <= max_slot and the specified commitment and encode it.
 async fn get_encoded_account_at_slot(
-    client: &SimplePostgresClient,
+    client: &AsyncPooledPostgresClient,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
     data_slice_config: Option<UiDataSliceConfig>,
@@ -380,7 +380,7 @@ async fn get_encoded_account_at_slot(
 async fn load_account_result(
     result: ServerResult<AccountInfo>,
     encoding: UiAccountEncoding,
-    client: &SimplePostgresClient,
+    client: &AsyncPooledPostgresClient,
     pubkey: &Pubkey,
     data_slice_config: Option<UiDataSliceConfig>,
 ) -> Result<Option<(UiAccount, i64)>> {
@@ -430,7 +430,7 @@ fn new_response<T>(slot: i64, value: T) -> RpcResponse<T> {
 }
 
 impl JsonRpcRequestProcessor {
-    pub fn new(config: JsonRpcConfig, db_client: SimplePostgresClient) -> Self {
+    pub fn new(config: JsonRpcConfig, db_client: AsyncPooledPostgresClient) -> Self {
         Self {
             config,
             db_client: Arc::new(RwLock::new(db_client)),
@@ -467,7 +467,7 @@ impl JsonRpcRequestProcessor {
 
     /// Get the slot with specified commitment level
     async fn get_slot_with_commitment(
-        client: &SimplePostgresClient,
+        client: &AsyncPooledPostgresClient,
         commitment_config: Option<CommitmentConfig>,
     ) -> Result<DbSlotInfo> {
         let slot_info = match commitment_config {
@@ -532,7 +532,7 @@ impl JsonRpcRequestProcessor {
     /// Get an iterator of spl-token accounts by owner address
     async fn get_filtered_spl_token_accounts_by_owner(
         &self,
-        client: &SimplePostgresClient,
+        client: &AsyncPooledPostgresClient,
         config: RpcAccountInfoConfig,
         slot: i64,
         program_id: &Pubkey,
@@ -559,7 +559,7 @@ impl JsonRpcRequestProcessor {
     /// Get an iterator of spl-token accounts by mint address
     async fn get_filtered_spl_token_accounts_by_mint(
         &self,
-        client: &SimplePostgresClient,
+        client: &AsyncPooledPostgresClient,
         config: RpcAccountInfoConfig,
         slot: i64,
         program_id: &Pubkey,
@@ -584,7 +584,7 @@ impl JsonRpcRequestProcessor {
 
     async fn get_filtered_program_accounts(
         &self,
-        client: &SimplePostgresClient,
+        client: &AsyncPooledPostgresClient,
         slot: i64,
         program_id: &Pubkey,
         config: RpcAccountInfoConfig,

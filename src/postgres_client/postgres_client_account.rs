@@ -1,7 +1,8 @@
 use {
     crate::{
         postgres_client::{
-            get_commitment_level_str, prepare_statement, ServerResult, SimplePostgresClient,
+            get_commitment_level_str, prepare_statement, AsyncPooledPostgresClient, PreparedQuery,
+            ServerResult, SimplePostgresClient,
         },
         postgres_rpc_server_config::PostgresRpcServerConfig,
         postgres_rpc_server_error::PostgresRpcServerError,
@@ -11,7 +12,7 @@ use {
     solana_sdk::{
         account::ReadableAccount, clock::Epoch, commitment_config::CommitmentLevel, pubkey::Pubkey,
     },
-    tokio_postgres::{types::FromSql, Client, Statement},
+    tokio_postgres::{error::Error, types::FromSql, Client, Statement},
 };
 
 impl Eq for AccountInfo {}
@@ -100,76 +101,37 @@ impl SimplePostgresClient {
     pub async fn build_get_account_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE pubkey = $1";
         info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by key for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
 
     /// This get the latest account from account table at certain commitment level.
     pub async fn build_get_account_with_commitment_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT get_account_with_commitment_level($1, $2)";
         info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by key for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
 
     /// This get the latest account from account table at certain commitment level.
     pub async fn build_get_account_with_commitment_and_slot_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error>{
         let stmt = "SELECT get_account_with_commitment_level_and_slot($1, $2, $3)";
         info!("Preparing statement {}", stmt);
-        let stmt = client.prepare(stmt).await;
-        info!("Prepared statement, ok? {}", stmt.is_ok());
-
-        match stmt {
-            Err(err) => {
-                return Err(PostgresRpcServerError::DataSchemaError {
-                    msg: format!(
-                        "Error in preparing for the accounts select by key for PostgreSQL database: {} host: {:?} user: {:?} config: {:?}",
-                        err, config.host, config.user, config
-                    ),
-                });
-            }
-            Ok(stmt) => Ok(stmt),
-        }
+        prepare_statement(stmt, client, config).await
     }
 
     pub async fn build_get_accounts_by_owner_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on FROM account AS acct \
             WHERE owner = $1 \
             AND slot <= $2";
@@ -179,7 +141,7 @@ impl SimplePostgresClient {
     pub async fn build_get_accounts_by_spl_token_owner_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_owner_index AS owner_idx ON acct.pubkey = owner_idx.owner_key \
@@ -191,7 +153,7 @@ impl SimplePostgresClient {
     pub async fn build_get_accounts_by_spl_token_mint_stmt(
         client: &Client,
         config: &PostgresRpcServerConfig,
-    ) -> ServerResult<Statement> {
+    ) -> Result<Statement, Error> {
         let stmt = "SELECT acct.pubkey, acct.slot, acct.owner, acct.lamports, acct.executable, acct.rent_epoch, \
             acct.data, acct.write_version, acct.updated_on FROM account AS acct \
             JOIN  spl_token_mint_index AS owner_idx ON acct.pubkey = owner_idx.mint_key \
@@ -199,6 +161,9 @@ impl SimplePostgresClient {
             AND owner_idx.slot <= $2";
         prepare_statement(stmt, client, config).await
     }
+}
+
+impl AsyncPooledPostgresClient {
 
     /// Get the account with the set commitment at the slot
     /// so that the account is consistent at that slot or an older slot
@@ -209,11 +174,10 @@ impl SimplePostgresClient {
         commitment_level: CommitmentLevel,
         slot: i64,
     ) -> ServerResult<AccountInfo> {
-        let client = self.client.read().await;
+        let client = self.pool.get().await?;
         let commitment_level = get_commitment_level_str(commitment_level);
 
-        let statement = &client.get_account_with_commitment_and_slot_stmt;
-        let client = &client.client.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccountWithCommitmentAndSlot).unwrap();
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client
             .query(statement, &[&pubkey_v, &commitment_level, &slot])
@@ -268,9 +232,8 @@ impl SimplePostgresClient {
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
-        let client = self.client.read().await;
-        let statement = &client.get_accounts_by_owner_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccountsByOwner).unwrap();
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -281,9 +244,8 @@ impl SimplePostgresClient {
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
-        let client = self.client.read().await;
-        let statement = &client.get_accounts_by_token_owner_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccountsByTokenOwner).unwrap();
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -294,9 +256,8 @@ impl SimplePostgresClient {
         slot: i64,
         owner: &Pubkey,
     ) -> ServerResult<Vec<AccountInfo>> {
-        let client = self.client.read().await;
-        let statement = &client.get_accounts_by_token_mint_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccountsByTokenMint).unwrap();
         let pubkey_v = owner.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v, &slot]).await;
         load_account_results(result, owner)
@@ -304,9 +265,8 @@ impl SimplePostgresClient {
 
     /// Get the latest account regardless its commitment level
     pub async fn get_account(&self, pubkey: &Pubkey) -> ServerResult<AccountInfo> {
-        let client = self.client.read().await;
-        let statement = &client.get_account_stmt;
-        let client = &client.client.get().await?;
+        let client = self.pool.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccount).unwrap();
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client.query(statement, &[&pubkey_v]).await;
         match result {
@@ -354,11 +314,9 @@ impl SimplePostgresClient {
         pubkey: &Pubkey,
         commitment_level: CommitmentLevel,
     ) -> ServerResult<AccountInfo> {
-        let client = self.client.read().await;
+        let client = self.pool.get().await?;
         let commitment_level = get_commitment_level_str(commitment_level);
-
-        let statement = &client.get_account_with_commitment_stmt;
-        let client = &client.client.get().await?;
+        let statement = client.get_prepared_query(PreparedQuery::GetAccountWithCommitment).unwrap();
         let pubkey_v = pubkey.to_bytes().to_vec();
         let result = client
             .query(statement, &[&pubkey_v, &commitment_level])
