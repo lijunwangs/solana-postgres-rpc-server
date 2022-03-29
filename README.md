@@ -1,7 +1,7 @@
 # solana-postgres-rpc-server
 A RPC server serving major RPC requests from PostgreSQL database streamed by the [solana-geyser-plugin-postgres](https://github.com/solana-labs/solana-accountsdb-plugin-postgres) plugin.
 
-# Build the RPC Server
+## Build the RPC Server
 Do the following to build
 
 ```
@@ -19,18 +19,21 @@ RPC queries.
 psql -U solana -p 5433 -h 10.138.0.9 -w -d solana -f sql/query_account.sql
 ```
 
+### Start the RPC Server
+
 Execute the command similar to the following to run the RPC server listening on port 8888.
 
 ```
 solana-postgres-rpc-server --db-config ~/postgres-db-config.json --rpc-port 8888 --rpc-threads 100 -o -
 ```
 
-
 Use the following to see the detailed arguments of the command line.
 
 ```
 solana-postgres-rpc-server --help
 ```
+
+### The Database Configuration File Format
 
 The `postgres-db-config.json` file specifies the connection information to the PostgreSQL database in JSON format.
 
@@ -49,7 +52,7 @@ information. For more advanced connection options such as passwords, please use 
 `connection_str` field. Please see [Rust Postgres Configuration](https://docs.rs/postgres/0.19.2/postgres/config/struct.Config.html).
 
 
-# Running RPC Queries Against the Server
+## Running RPC Queries Against the Server
 
 The Server currently supports the following RPC calls.
 
