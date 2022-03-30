@@ -11,9 +11,10 @@ cargo build [--release]
 ## Run the RPC Server
 
 ### Prepare the Database
-The RPC server requires a PostgreSQL database has already been setup. In addition, run the following
-script to create some of the stored functions and procedures in the database which are used for serving
-RPC queries.
+The RPC server requires a PostgreSQL database has already been setup. Please consult with
+[solana-geyser-plugin-postgres](https://github.com/solana-labs/solana-accountsdb-plugin-postgres) on
+setting up the plugin and database. In addition, run the following script to create some of the stored
+functions and procedures in the database which are used for serving RPC queries.
 
 ```
 psql -U solana -p 5433 -h 10.138.0.9 -w -d solana -f sql/query_account.sql
