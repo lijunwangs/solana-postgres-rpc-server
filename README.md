@@ -20,6 +20,8 @@ functions and procedures in the database which are used for serving RPC queries.
 psql -U solana -p 5433 -h 10.138.0.9 -w -d solana -f sql/query_account.sql
 ```
 
+In order for this server to produce correct results following the RPC API spec you **need** to enable `store_account_historical_data` in the plugin configuration.
+
 ### Start the RPC Server
 
 Execute the command similar to the following to run the RPC server listening on port 8888.
@@ -55,10 +57,12 @@ information. For more advanced connection options such as passwords, please use 
 
 ## Running RPC Queries Against the Server
 
-The Server currently supports the following RPC calls.
+The Server currently supports the following RPC calls:
 
 - getAccountInfo
 - getMultipleAccounts
+
+The Server has partial/preliminary support for: 
 - getProgramAccounts
 
 There is plan to add support for other RPC calls related to blocks, accounts and transactions.
